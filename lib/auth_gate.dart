@@ -8,16 +8,106 @@ class AuthGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        if (snapshot.hasData) return const MainScreen();
-        return const EmailLoginScreen();
+        final user = snapshot.data;
+        if (user == null) return const EmailLoginScreen();
+        if (!user.emailVerified) return const EmailVerificationScreen();
+        return const MainScreen();
       },
+    );
+  }
+}
+
+class EmailVerificationScreen extends StatefulWidget {
+  const EmailVerificationScreen({super.key});
+
+  @override
+  State<EmailVerificationScreen> createState() => _EmailVerificationScreenState();
+}
+
+class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
+  bool loading = false;
+  String message = 'Apne Gmail inbox mein verification link check karo. Spam folder bhi dekho.';
+
+  Future<void> resendEmail() async {
+    setState(() => loading = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      await user.sendEmailVerification();
+      if (mounted) setState(() => message = 'Verification link bhej diya. Gmail aur Spam folder check karo.');
+    } on FirebaseAuthException catch (e) {
+      if (mounted) setState(() => message = e.message ?? 'Email nahi bhej paye. Thodi der baad try karo.');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> checkVerification() async {
+    setState(() => loading = true);
+    try {
+      await FirebaseAuth.instance.currentUser?.reload();
+      final user = FirebaseAuth.instance.currentUser;
+      if (!mounted) return;
+      if (user != null && user.emailVerified) {
+        await FirebaseAuth.instance.currentUser?.getIdToken(true);
+        setState(() => message = 'Email verify ho gaya! Home screen khul rahi hai.');
+      } else {
+        setState(() => message = 'Abhi verification confirm nahi hua. Gmail ka link kholo, phir dobara check karo.');
+      }
+    } catch (_) {
+      if (mounted) setState(() => message = 'Check nahi ho paya. Internet check karke dobara try karo.');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
+  }
+
+  Future<void> logout() async {
+    await FirebaseAuth.instance.signOut();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final email = FirebaseAuth.instance.currentUser?.email ?? '';
+    return Scaffold(
+      appBar: AppBar(title: const Text('Gmail verify karo')),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(Icons.mark_email_unread_outlined, size: 72, color: Color(0xFFE94E91)),
+                const SizedBox(height: 20),
+                const Text('Apna email verify karo', textAlign: TextAlign.center, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                Text('Humne $email par verification link bheja hai.', textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                Text(message, textAlign: TextAlign.center),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: loading ? null : checkVerification,
+                  child: const Text('Maine email verify kar liya'),
+                ),
+                OutlinedButton(
+                  onPressed: loading ? null : resendEmail,
+                  child: const Text('Verification email dobara bhejo'),
+                ),
+                TextButton(onPressed: loading ? null : logout, child: const Text('Logout')),
+                if (loading) const Center(child: CircularProgressIndicator()),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
