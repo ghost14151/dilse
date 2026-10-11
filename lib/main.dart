@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'auth_gate.dart';
+import 'real_social_pages.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,10 +44,10 @@ class _MainScreenState extends State<MainScreen> {
 
   final pages = const [
     HomePage(),
-    DiscoverPage(),
+    FirestoreDiscoverPage(),
     ChatsPage(),
     RoomsPage(),
-    ProfilePage(),
+    FirestoreProfilePage(),
   ];
 
   @override
