@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "827623914380",
+    "project_id": "dilse-b7bd8",
+    "storage_bucket": "dilse-b7bd8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:827623914380:android:68bb065d33b8e1d27d74a9",
+        "android_client_info": {
+          "package_name": "com.dilse.app.dilse"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFyMmmSvR6rHqcaHRcww0p54O_BIhe5iY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
