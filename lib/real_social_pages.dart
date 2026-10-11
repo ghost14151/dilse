@@ -285,6 +285,17 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
                             ),
                             title: Text(name),
                             subtitle: Text(bio.isEmpty ? 'DilSe member' : bio),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => PublicUserProfilePage(
+                                  userId: users[index].id,
+                                  name: name,
+                                  bio: bio,
+                                ),
+                              ),
+                            ),
+
                           ),
                         );
                       },
@@ -293,6 +304,276 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
                 ),
         ),
       ],
+    );
+  }
+}
+
+
+class PublicUserProfilePage extends StatelessWidget {
+  final String userId, name, bio;
+  const PublicUserProfilePage({
+    super.key, required this.userId, required this.name, required this.bio,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final me = FirebaseAuth.instance.currentUser;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Profile')),
+      body: ListView(padding: const EdgeInsets.all(24), children: [
+        const CircleAvatar(
+          radius: 45, child: Icon(Icons.person, size: 48),
+        ),
+        const SizedBox(height: 16),
+        Center(child: Text(name,
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
+        const SizedBox(height: 8),
+        Center(child: Text(bio.isEmpty ? 'DilSe member' : bio)),
+        const SizedBox(height: 24),
+        FilledButton.icon(
+          icon: const Icon(Icons.chat),
+          label: const Text('Private Message'),
+          onPressed: me == null || !me.emailVerified || me.uid == userId
+              ? null
+              : () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => DirectChatPage(
+                    otherUserId: userId, otherName: name,
+                  ),
+                )),
+        ),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.flag_outlined),
+          label: const Text('Report profile'),
+          onPressed: me == null || !me.emailVerified || me.uid == userId
+              ? null
+              : () async {
+                  final reason = await showDialog<String>(
+                    context: context,
+                    builder: (c) => AlertDialog(
+                      title: const Text('Report profile'),
+                      content: const Text(
+                        'Kya ye profile spam, fake ya inappropriate hai?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(c),
+                          child: const Text('Cancel')),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(c, 'Spam or inappropriate'),
+                          child: const Text('Report')),
+                      ],
+                    ),
+                  );
+                  if (reason == null || !context.mounted) return;
+                  try {
+                    await FirebaseFirestore.instance.collection('reports').add({
+                      'reporterId': me.uid,
+                      'targetUserId': userId,
+                      'reason': reason,
+                      'createdAt': FieldValue.serverTimestamp(),
+                    });
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Report submitted')),
+                      );
+                    }
+                  } catch (_) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text(
+                          'Report failed. Firestore rules check karein.')),
+                      );
+                    }
+                  }
+                },
+        ),
+      ]),
+    );
+  }
+}
+
+class DirectChatPage extends StatefulWidget {
+  final String otherUserId, otherName;
+  const DirectChatPage({
+    super.key, required this.otherUserId, required this.otherName,
+  });
+  @override
+  State<DirectChatPage> createState() => _DirectChatPageState();
+}
+
+class _DirectChatPageState extends State<DirectChatPage> {
+  final _input = TextEditingController();
+  bool _sending = false;
+
+  String get _chatId {
+    final ids = [FirebaseAuth.instance.currentUser!.uid, widget.otherUserId]
+      ..sort();
+    return ids.join('_');
+  }
+
+  @override
+  void dispose() {
+    _input.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final text = _input.text.trim();
+    if (user == null || !user.emailVerified || text.isEmpty || _sending) return;
+    if (text.length > 4000) return;
+
+    setState(() => _sending = true);
+    _input.clear();
+    try {
+      final db = FirebaseFirestore.instance;
+      final chat = db.collection('chats').doc(_chatId);
+      final snap = await chat.get();
+      final participants = [user.uid, widget.otherUserId];
+      if (!snap.exists) {
+        await chat.set({
+          'participants': participants,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'lastMessage': text,
+        });
+      } else {
+        await chat.update({
+          'updatedAt': FieldValue.serverTimestamp(),
+          'lastMessage': text,
+        });
+      }
+      await chat.collection('messages').add({
+        'senderId': user.uid,
+        'text': text,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      _input.text = text;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(
+            'Message failed. Firestore permissions check karein.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !user.emailVerified) {
+      return const Scaffold(body: Center(
+        child: Text('Verified login required')));
+    }
+    final ref = FirebaseFirestore.instance.collection('chats')
+      .doc(_chatId).collection('messages')
+      .orderBy('createdAt').limit(200);
+
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.otherName)),
+      body: Column(children: [
+        Expanded(
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: ref.snapshots(),
+            builder: (context, snap) {
+              if (snap.hasError) return const Center(
+                child: Text('Chat permission error. Firestore rules check karein.'));
+              if (!snap.hasData) return const Center(
+                child: CircularProgressIndicator());
+              final docs = snap.data!.docs;
+              if (docs.isEmpty) return const Center(
+                child: Text('Pehla message bhejo 👋'));
+              return ListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: docs.length,
+                itemBuilder: (context, i) {
+                  final d = docs[i].data();
+                  final mine = d['senderId'] == user.uid;
+                  return Align(
+                    alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 4),
+                      padding: const EdgeInsets.all(12),
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.of(context).size.width * .78),
+                      decoration: BoxDecoration(
+                        color: mine ? const Color(0xFF7556D9) : Colors.black12,
+                        borderRadius: BorderRadius.circular(14)),
+                      child: Text(d['text'] as String? ?? '',
+                        style: TextStyle(
+                          color: mine ? Colors.white : Colors.black87)),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        SafeArea(child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(children: [
+            Expanded(child: TextField(
+              controller: _input, maxLength: 4000, maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Message...', counterText: '',
+                border: OutlineInputBorder()),
+              onSubmitted: (_) => _send(),
+            )),
+            IconButton(
+              onPressed: _sending ? null : _send,
+              icon: const Icon(Icons.send),
+            ),
+          ]),
+        )),
+      ]),
+    );
+  }
+}
+
+class FirestoreChatsPage extends StatelessWidget {
+  const FirestoreChatsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !user.emailVerified) {
+      return const Center(child: Text('Verified login required'));
+    }
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance.collection('chats')
+        .where('participants', arrayContains: user.uid).snapshots(),
+      builder: (context, snap) {
+        if (snap.hasError) return const Center(
+          child: Text('Chats permission error. Rules check karein.'));
+        if (!snap.hasData) return const Center(
+          child: CircularProgressIndicator());
+        if (snap.data!.docs.isEmpty) return const Center(
+          child: Text('Abhi chats nahi hain. Discover se message karo 💌'));
+        return ListView(children: snap.data!.docs.map((doc) {
+          final data = doc.data();
+          final ids = List<String>.from(data['participants'] ?? []);
+          final other = ids.where((id) => id != user.uid).firstOrNull;
+          if (other == null) return const SizedBox.shrink();
+          return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            future: FirebaseFirestore.instance.collection('users').doc(other).get(),
+            builder: (context, profile) {
+              final name = profile.data?.data()?['displayName'] as String?
+                ?? 'DilSe User';
+              return ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person)),
+                title: Text(name),
+                subtitle: Text(data['lastMessage'] as String? ?? ''),
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => DirectChatPage(
+                    otherUserId: other, otherName: name),
+                )),
+              );
+            },
+          );
+        }).toList());
+      },
     );
   }
 }

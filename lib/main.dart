@@ -172,25 +172,8 @@ class DiscoverPage extends StatelessWidget {
 
 class ChatsPage extends StatelessWidget {
   const ChatsPage({super.key});
-
   @override
-  Widget build(BuildContext context) {
-    return ListView(padding: const EdgeInsets.all(20), children: [
-      const PageHeading(title: 'Your Chats 💌', subtitle: 'Dosti ko baaton se badhao'),
-      const SizedBox(height: 18),
-      TextField(decoration: InputDecoration(
-        hintText: 'Chats search karo', prefixIcon: const Icon(Icons.search),
-        filled: true, fillColor: Colors.white,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none))),
-      const SizedBox(height: 12),
-      const ChatTile(name: 'Aanya', message: 'Hey! Kaise ho? 😊', emoji: '👩🏻', color: Color(0xFFFFD8E6)),
-      const ChatTile(name: 'Rohan', message: 'Kal room mein milte hain!', emoji: '👨🏻', color: Color(0xFFD8E3FF)),
-      const ChatTile(name: 'Meera', message: 'Nice to meet you ✨', emoji: '👩🏽', color: Color(0xFFFFE8BD)),
-      const SizedBox(height: 18),
-      const Text('Yeh sample conversations hain. Real private messaging abhi connect nahi hai.',
-        style: TextStyle(color: Colors.black54, fontSize: 12)),
-    ]);
-  }
+  Widget build(BuildContext context) => const FirestoreChatsPage();
 }
 
 class RoomsPage extends StatelessWidget {
