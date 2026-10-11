@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'auth_gate.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,7 +26,7 @@ class DilSeApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: pink),
         appBarTheme: const AppBarTheme(backgroundColor: bg),
       ),
-      home: const MainScreen(),
+      home: const AuthGate(),
     );
   }
 }
