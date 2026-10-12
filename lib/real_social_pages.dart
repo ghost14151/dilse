@@ -427,21 +427,12 @@ class _DirectChatPageState extends State<DirectChatPage> {
     try {
       final db = FirebaseFirestore.instance;
       final chat = db.collection('chats').doc(_chatId);
-      final snap = await chat.get();
-      final participants = [user.uid, widget.otherUserId];
-      if (!snap.exists) {
-        await chat.set({
-          'participants': participants,
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-          'lastMessage': text,
-        });
-      } else {
-        await chat.update({
-          'updatedAt': FieldValue.serverTimestamp(),
-          'lastMessage': text,
-        });
-      }
+      final participants = [user.uid, widget.otherUserId]..sort();
+      await chat.set({
+        'participants': participants,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'lastMessage': text,
+      }, SetOptions(merge: true));
       await chat.collection('messages').add({
         'senderId': user.uid,
         'text': text,
