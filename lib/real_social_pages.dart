@@ -411,6 +411,26 @@ class _DirectChatPageState extends State<DirectChatPage> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _markRead();
+    });
+  }
+
+  Future<void> _markRead() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !user.emailVerified) return;
+    try {
+      await FirebaseFirestore.instance.collection('chats').doc(_chatId).update({
+        'unreadCounts.${user.uid}': 0,
+      });
+    } catch (_) {
+      // Chat doc ya unread count abhi na ho to ignore karein.
+    }
+  }
+
+  @override
   void dispose() {
     _input.dispose();
     super.dispose();
@@ -438,6 +458,13 @@ class _DirectChatPageState extends State<DirectChatPage> {
         'text': text,
         'createdAt': FieldValue.serverTimestamp(),
       });
+      try {
+        await chat.update({
+          'unreadCounts.${widget.otherUserId}': FieldValue.increment(1),
+        });
+      } catch (_) {
+        // Message send ho chuka ho to unread badge failure use fail na dikhaye.
+      }
     } catch (_) {
       _input.text = text;
       if (mounted) {
@@ -552,10 +579,34 @@ class FirestoreChatsPage extends StatelessWidget {
             builder: (context, profile) {
               final name = profile.data?.data()?['displayName'] as String?
                 ?? 'DilSe User';
+              final counts = data['unreadCounts'];
+              final unread = counts is Map
+                  ? (counts[user.uid] as num?)?.toInt() ?? 0
+                  : 0;
               return ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.person)),
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFFFFE3F0),
+                  child: const Icon(Icons.person, color: Color(0xFFE94E91)),
+                ),
                 title: Text(name),
                 subtitle: Text(data['lastMessage'] as String? ?? ''),
+                trailing: unread > 0
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE94E91),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          unread > 99 ? '99+' : '$unread',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    : null,
                 onTap: () => Navigator.push(context, MaterialPageRoute(
                   builder: (_) => DirectChatPage(
                     otherUserId: other, otherName: name),
