@@ -496,13 +496,17 @@ class _DirectChatPageState extends State<DirectChatPage> {
           child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             stream: ref.snapshots(),
             builder: (context, snap) {
-              if (snap.hasError) return const Center(
-                child: Text('Chat permission error. Firestore rules check karein.'));
-              if (!snap.hasData) return const Center(
-                child: CircularProgressIndicator());
+              if (snap.hasError) {
+                return const Center(
+                  child: Text('Chat permission error. Firestore rules check karein.'));
+              }
+              if (!snap.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
               final docs = snap.data!.docs;
-              if (docs.isEmpty) return const Center(
-                child: Text('Pehla message bhejo 👋'));
+              if (docs.isEmpty) {
+                return const Center(child: Text('Pehla message bhejo 👋'));
+              }
               return ListView.builder(
                 padding: const EdgeInsets.all(12),
                 itemCount: docs.length,
@@ -563,12 +567,15 @@ class FirestoreChatsPage extends StatelessWidget {
       stream: FirebaseFirestore.instance.collection('chats')
         .where('participants', arrayContains: user.uid).snapshots(),
       builder: (context, snap) {
-        if (snap.hasError) return const Center(
-          child: Text('Chats permission error. Rules check karein.'));
-        if (!snap.hasData) return const Center(
-          child: CircularProgressIndicator());
-        if (snap.data!.docs.isEmpty) return const Center(
-          child: Text('Abhi chats nahi hain. Discover se message karo 💌'));
+        if (snap.hasError) {
+          return const Center(child: Text('Chats permission error. Rules check karein.'));
+        }
+        if (!snap.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.data!.docs.isEmpty) {
+          return const Center(child: Text('Abhi chats nahi hain. Discover se message karo 💌'));
+        }
         return ListView(children: snap.data!.docs.map((doc) {
           final data = doc.data();
           final ids = List<String>.from(data['participants'] ?? []);
