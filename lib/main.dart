@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'auth_gate.dart';
 import 'real_social_pages.dart';
@@ -76,6 +78,8 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -89,11 +93,15 @@ class HomePage extends StatelessWidget {
             child: const Icon(Icons.favorite, color: Colors.white, size: 27),
           ),
           const SizedBox(width: 10),
-          const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('DilSe', style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold, color: purple)),
-            Text('Dosti Jo Dil Tak Jaaye ❤️', style: TextStyle(fontSize: 12, color: Colors.black54)),
-          ])),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none, size: 28)),
+          const Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('DilSe', style: TextStyle(
+                fontSize: 27, fontWeight: FontWeight.bold, color: purple)),
+              Text('Dosti Jo Dil Tak Jaaye ❤️',
+                style: TextStyle(fontSize: 12, color: Colors.black54)),
+            ],
+          )),
         ]),
         const SizedBox(height: 24),
         Container(
@@ -102,38 +110,98 @@ class HomePage extends StatelessWidget {
             gradient: const LinearGradient(colors: [purple, pink]),
             borderRadius: BorderRadius.circular(24),
           ),
-          child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Har dosti ki shuruaat yahin se! 💕',
-              style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-            SizedBox(height: 8),
-            Text('Naye logon se milo, baatein karo aur apni yaari banao.',
-              style: TextStyle(color: Colors.white, height: 1.5)),
-          ]),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Har dosti ki shuruaat yahin se! 💕',
+                style: TextStyle(color: Colors.white, fontSize: 22,
+                  fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('Naye logon se milo, baatein karo aur apni yaari banao.',
+                style: TextStyle(color: Colors.white, height: 1.5)),
+            ],
+          ),
         ),
         const SizedBox(height: 26),
-        const SectionTitle('Online Friends', 'Sab dekho'),
+        const SectionTitle('DilSe Members', 'Real profiles'),
         const SizedBox(height: 15),
         SizedBox(
-          height: 112,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: const [
-              FriendAvatar(name: 'Aanya', color: Color(0xFFFFC7D8), emoji: '👩🏻', online: true),
-              FriendAvatar(name: 'Rohan', color: Color(0xFFC8D7FF), emoji: '👨🏻', online: true),
-              FriendAvatar(name: 'Meera', color: Color(0xFFFFE2AE), emoji: '👩🏽', online: true),
-              FriendAvatar(name: 'Arjun', color: Color(0xFFC6F0D0), emoji: '🧑🏻', online: false),
-              FriendAvatar(name: 'Sana', color: Color(0xFFE7D0FF), emoji: '👩🏽', online: true),
-            ],
+          height: 125,
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('users').limit(30).snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Center(child: Text('Profiles load nahi hui.'));
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final members = snapshot.data!.docs.where(
+                (doc) => doc.id != currentUser?.uid).toList();
+
+              if (members.isEmpty) {
+                return const Center(
+                  child: Text('Abhi doosre members nahi hain.'),
+                );
+              }
+
+              return ListView(
+                scrollDirection: Axis.horizontal,
+                children: members.map((doc) {
+                  final data = doc.data();
+                  final name = data['displayName'] as String? ?? 'DilSe User';
+                  final bio = data['bio'] as String? ?? '';
+                  return SizedBox(
+                    width: 82,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) =>
+                          PublicUserProfilePage(
+                            userId: doc.id, name: name, bio: bio))),
+                      child: Column(children: [
+                        CircleAvatar(
+                          radius: 29,
+                          backgroundColor: const Color(0xFFFFD8E6),
+                          child: Text(
+                            name.isNotEmpty ? name[0].toUpperCase() : '?',
+                            style: const TextStyle(
+                              color: pink, fontSize: 23,
+                              fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        Text(name, maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                        const Text('View profile',
+                          style: TextStyle(fontSize: 10,
+                            color: Colors.black54)),
+                      ]),
+                    ),
+                  );
+                }).toList(),
+              );
+            },
           ),
         ),
         const SizedBox(height: 24),
         const SectionTitle('DilSe par kya naya hai?', 'Explore'),
         const SizedBox(height: 12),
-        const FeatureCard(icon: Icons.people_alt, title: 'Naye dost banao', subtitle: 'Apni pasand ke log discover karo', color: purple),
-        const FeatureCard(icon: Icons.chat_rounded, title: 'Dil khol kar baat karo', subtitle: 'Private chat ka experience', color: pink),
-        const FeatureCard(icon: Icons.mic, title: 'Live Voice Rooms', subtitle: 'Group conversations mein judho', color: Color(0xFF269B8D)),
+        const FeatureCard(icon: Icons.people_alt,
+          title: 'Naye dost banao',
+          subtitle: 'Real members ki profiles dekho', color: purple),
+        const FeatureCard(icon: Icons.chat_rounded,
+          title: 'Dil khol kar baat karo',
+          subtitle: 'Private chat ka experience', color: pink),
+        const FeatureCard(icon: Icons.mic,
+          title: 'Live Voice Rooms',
+          subtitle: 'Voice rooms ka feature abhi taiyar karna baaki hai',
+          color: Color(0xFF269B8D)),
         const SizedBox(height: 16),
-        const Center(child: Text('Nayi yaari, nayi kahani ❤️', style: TextStyle(color: Colors.black54))),
+        const Center(child: Text('Nayi yaari, nayi kahani ❤️',
+          style: TextStyle(color: Colors.black54))),
       ],
     );
   }
