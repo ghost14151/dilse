@@ -447,30 +447,74 @@ class _DirectChatPageState extends State<DirectChatPage> {
     try {
       final db = FirebaseFirestore.instance;
       final chat = db.collection('chats').doc(_chatId);
+      final usage = db.collection('chatUsage').doc(user.uid);
+      final subscription = db.collection('subscriptions').doc(user.uid);
+      final message = chat.collection('messages').doc();
       final participants = [user.uid, widget.otherUserId]..sort();
+
+      // Ensure the chat exists before the atomic message transaction.
       await chat.set({
         'participants': participants,
         'updatedAt': FieldValue.serverTimestamp(),
-        'lastMessage': text,
       }, SetOptions(merge: true));
-      await chat.collection('messages').add({
-        'senderId': user.uid,
-        'text': text,
-        'createdAt': FieldValue.serverTimestamp(),
+
+      await db.runTransaction((tx) async {
+        final usageSnap = await tx.get(usage);
+        final subscriptionSnap = await tx.get(subscription);
+        final chatSnap = await tx.get(chat);
+
+        if (!chatSnap.exists) {
+          throw StateError('CHAT_NOT_FOUND');
+        }
+
+        final sub = subscriptionSnap.data();
+        final expiry = sub?['expiresAt'];
+        final premium = sub?['active'] == true &&
+            expiry is Timestamp &&
+            expiry.toDate().isAfter(DateTime.now());
+
+        final sent = (usageSnap.data()?['messagesSent'] as num?)?.toInt() ?? 0;
+        if (!premium && sent >= 10) {
+          throw StateError('FREE_CHAT_LIMIT');
+        }
+
+        if (!premium) {
+          tx.set(usage, {
+            'messagesSent': sent + 1,
+            'lastChatId': _chatId,
+            'lastMessageId': message.id,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+
+        tx.set(chat, {
+          'participants': participants,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'lastMessage': text,
+        }, SetOptions(merge: true));
+
+        tx.set(message, {
+          'senderId': user.uid,
+          'text': text,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       });
+
       try {
         await chat.update({
           'unreadCounts.${widget.otherUserId}': FieldValue.increment(1),
         });
-      } catch (_) {
-        // Message send ho chuka ho to unread badge failure use fail na dikhaye.
-      }
-    } catch (_) {
+      } catch (_) {}
+    } catch (e) {
       _input.text = text;
       if (mounted) {
+        final limitReached = e.toString().contains('FREE_CHAT_LIMIT');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(
-            'Message failed. Firestore permissions check karein.')),
+          SnackBar(content: Text(
+            limitReached
+                ? '10 free messages complete. Chat ke liye ₹99 / 30-day Pass chahiye.'
+                : 'Message send nahi hua. Firestore rules aur connection check karein.',
+          )),
         );
       }
     } finally {
