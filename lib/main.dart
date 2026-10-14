@@ -27,9 +27,58 @@ class DilSeApp extends StatelessWidget {
       title: 'DilSe',
       theme: ThemeData(
         useMaterial3: true,
+        brightness: Brightness.dark,
         scaffoldBackgroundColor: bg,
-        colorScheme: ColorScheme.fromSeed(seedColor: pink),
-        appBarTheme: const AppBarTheme(backgroundColor: bg),
+        colorScheme: const ColorScheme.dark(
+          primary: pink,
+          secondary: purple,
+          surface: surface,
+          onPrimary: Colors.white,
+          onSecondary: Colors.white,
+          onSurface: Colors.white,
+          error: Color(0xFFFF6B75),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: bg,
+          foregroundColor: Colors.white,
+          elevation: 0,
+        ),
+        textTheme: ThemeData.dark().textTheme.apply(
+          bodyColor: Colors.white,
+          displayColor: Colors.white,
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: surface,
+          labelStyle: const TextStyle(color: Colors.white70),
+          hintStyle: const TextStyle(color: Colors.white54),
+          prefixIconColor: purple,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Color(0xFF343852)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: pink, width: 1.5),
+          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+        ),
+        navigationBarTheme: const NavigationBarThemeData(
+          backgroundColor: surface,
+          indicatorColor: Color(0xFF45233F),
+          labelTextStyle: WidgetStatePropertyAll(
+            TextStyle(color: Colors.white, fontSize: 12),
+          ),
+          iconTheme: WidgetStatePropertyAll(
+            IconThemeData(color: Colors.white70),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: pink,
+            foregroundColor: Colors.white,
+          ),
+        ),
       ),
       home: const AuthGate(),
     );
