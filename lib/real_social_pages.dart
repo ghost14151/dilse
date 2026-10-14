@@ -487,7 +487,7 @@ class _DirectChatPageState extends State<DirectChatPage> {
     }
     final ref = FirebaseFirestore.instance.collection('chats')
       .doc(_chatId).collection('messages')
-      .orderBy('createdAt').limit(200);
+      .orderBy('createdAt', descending: true);
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.otherName)),
@@ -508,6 +508,7 @@ class _DirectChatPageState extends State<DirectChatPage> {
                 return const Center(child: Text('Pehla message bhejo 👋'));
               }
               return ListView.builder(
+                reverse: true,
                 padding: const EdgeInsets.all(12),
                 itemCount: docs.length,
                 itemBuilder: (context, i) {
