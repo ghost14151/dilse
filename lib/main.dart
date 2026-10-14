@@ -112,8 +112,19 @@ class _MainScreenState extends State<MainScreen> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
         onDestinationSelected: (i) => setState(() => tab = i),
-        backgroundColor: Colors.white,
-        indicatorColor: const Color(0xFFFFE0EF),
+        backgroundColor: surface,
+        indicatorColor: const Color(0xFF45233F),
+        labelTextStyle: WidgetStateProperty.resolveWith<TextStyle?>(
+          (states) => TextStyle(
+            color: states.contains(WidgetState.selected)
+                ? pink
+                : Colors.white70,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.bold
+                : FontWeight.normal,
+            fontSize: 11,
+          ),
+        ),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
