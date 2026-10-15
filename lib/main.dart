@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 
 import 'auth_gate.dart';
 import 'real_social_pages.dart';
@@ -16,6 +19,14 @@ const pink = Color(0xFFFF3D9A);
 const purple = Color(0xFF925CFF);
 const bg = Color(0xFF090B18);
 const surface = Color(0xFF15182B);
+
+const String dilseDatabaseUrl =
+    'https://dilse-b7bd8-default-rtdb.asia-southeast1.firebasedatabase.app';
+
+final FirebaseDatabase dilseRealtimeDatabase = FirebaseDatabase.instanceFor(
+  app: Firebase.app(),
+  databaseURL: dilseDatabaseUrl,
+);
 
 class DilSeApp extends StatelessWidget {
   const DilSeApp({super.key});
@@ -94,13 +105,63 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int tab = 0;
+  StreamSubscription<DatabaseEvent>? _presenceConnection;
+  DatabaseReference? _myPresenceRef;
 
-  final pages = const [
-    HomePage(),
-    FirestoreDiscoverPage(),
-    ChatsPage(),
-    RoomsPage(),
-    FirestoreProfilePage(),
+  @override
+  void initState() {
+    super.initState();
+    _startPresence();
+  }
+
+  void _startPresence() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !user.emailVerified) return;
+
+    final presenceRef = dilseRealtimeDatabase.ref('status/${user.uid}');
+    _myPresenceRef = presenceRef;
+
+    _presenceConnection = dilseRealtimeDatabase
+        .ref('.info/connected')
+        .onValue
+        .listen((event) async {
+          if (event.snapshot.value != true) return;
+
+          try {
+            await presenceRef.onDisconnect().set({
+              'state': 'offline',
+              'last_changed': ServerValue.timestamp,
+            });
+            await presenceRef.set({
+              'state': 'online',
+              'last_changed': ServerValue.timestamp,
+            });
+          } catch (e) {
+            debugPrint('DilSe presence update failed: $e');
+          }
+        });
+  }
+
+  @override
+  void dispose() {
+    _presenceConnection?.cancel();
+    final ref = _myPresenceRef;
+    if (ref != null) {
+      ref
+          .set({'state': 'offline', 'last_changed': ServerValue.timestamp})
+          .catchError((Object e) {
+            debugPrint('DilSe offline update failed: $e');
+          });
+    }
+    super.dispose();
+  }
+
+  late final List<Widget> pages = [
+    HomePage(onOpenTab: (index) => setState(() => tab = index)),
+    const FirestoreDiscoverPage(),
+    const ChatsPage(),
+    const RoomsPage(),
+    const FirestoreProfilePage(),
   ];
 
   @override
@@ -157,187 +218,421 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+class HomePage extends StatefulWidget {
+  const HomePage({super.key, required this.onOpenTab});
+
+  final ValueChanged<int> onOpenTab;
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  final TextEditingController _searchController = TextEditingController();
+  String _search = '';
+  int _refreshKey = 0;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _openTab(int index) => widget.onOpenTab(index);
 
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
 
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [pink, purple]),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: const Icon(Icons.favorite, color: Colors.white, size: 27),
-            ),
-            const SizedBox(width: 10),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'DilSe',
-                    style: TextStyle(
-                      fontSize: 27,
-                      fontWeight: FontWeight.bold,
-                      color: purple,
-                    ),
-                  ),
-                  Text(
-                    'Dosti Jo Dil Tak Jaaye ❤️',
-                    style: TextStyle(fontSize: 12, color: Colors.white70),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(colors: [purple, pink]),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return RefreshIndicator(
+      color: pink,
+      backgroundColor: surface,
+      onRefresh: () async {
+        setState(() => _refreshKey++);
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+        children: [
+          Row(
             children: [
-              Text(
-                'Har dosti ki shuruaat yahin se! 💕',
-                style: TextStyle(
+              Container(
+                padding: const EdgeInsets.all(11),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [pink, purple]),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.favorite,
                   color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
+                  size: 27,
                 ),
               ),
-              SizedBox(height: 8),
-              Text(
-                'Naye logon se milo, baatein karo aur apni yaari banao.',
-                style: TextStyle(color: Colors.white, height: 1.5),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'DilSe',
+                      style: TextStyle(
+                        fontSize: 27,
+                        fontWeight: FontWeight.bold,
+                        color: purple,
+                      ),
+                    ),
+                    Text(
+                      'Dosti Jo Dil Tak Jaaye ❤️',
+                      style: TextStyle(fontSize: 12, color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh members',
+                onPressed: () => setState(() => _refreshKey++),
+                icon: const Icon(Icons.refresh_rounded, color: Colors.white),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 26),
-        const SectionTitle('DilSe Members', 'Real profiles'),
-        const SizedBox(height: 15),
-        SizedBox(
-          height: 125,
-          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          const SizedBox(height: 22),
+          Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [purple, pink],
+              ),
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: pink.withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.waving_hand_rounded,
+                  color: Colors.white,
+                  size: 30,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Welcome${currentUser?.displayName != null && currentUser!.displayName!.trim().isNotEmpty ? ', ${currentUser.displayName!.trim()}' : ' to DilSe'}! 💕',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Naye logon se milo, dosti badhao aur apni kahani shuru karo.',
+                  style: TextStyle(color: Colors.white, height: 1.5),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 13,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.17),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.favorite_border,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      SizedBox(width: 7),
+                      Text(
+                        'Nayi yaari, nayi kahani',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 25),
+          const SectionTitle('Apne naye dost khojo', 'Discover'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _searchController,
+            onChanged: (value) =>
+                setState(() => _search = value.trim().toLowerCase()),
+            decoration: InputDecoration(
+              hintText: 'Naam ya bio search karo...',
+              prefixIcon: const Icon(Icons.search_rounded),
+              suffixIcon: _search.isNotEmpty
+                  ? IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _search = '');
+                      },
+                      icon: const Icon(Icons.close),
+                    )
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 22),
+          const SectionTitle('DilSe Members', 'Real profiles'),
+          const SizedBox(height: 13),
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            key: ValueKey(_refreshKey),
             stream: FirebaseFirestore.instance
                 .collection('users')
-                .limit(30)
+                .limit(50)
                 .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.hasError) {
-                return const Center(child: Text('Profiles load nahi hui.'));
-              }
-              if (!snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final members = snapshot.data!.docs
-                  .where((doc) => doc.id != currentUser?.uid)
-                  .toList();
-
-              if (members.isEmpty) {
-                return const Center(
-                  child: Text('Abhi doosre members nahi hain.'),
+                return Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: surface,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Text(
+                    'Members load nahi ho paaye. Internet ya Firebase rules check karo.',
+                    textAlign: TextAlign.center,
+                  ),
                 );
               }
 
-              return ListView(
-                scrollDirection: Axis.horizontal,
-                children: members.map((doc) {
-                  final data = doc.data();
-                  final name = data['displayName'] as String? ?? 'DilSe User';
-                  final bio = data['bio'] as String? ?? '';
-                  return SizedBox(
-                    width: 82,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => PublicUserProfilePage(
-                            userId: doc.id,
-                            name: name,
-                            bio: bio,
-                          ),
-                        ),
+              if (!snapshot.hasData) {
+                return const Padding(
+                  padding: EdgeInsets.all(25),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              final members = snapshot.data!.docs.where((doc) {
+                if (doc.id == currentUser?.uid) return false;
+                final data = doc.data();
+                final name = (data['displayName'] ?? '')
+                    .toString()
+                    .toLowerCase();
+                final bio = (data['bio'] ?? '').toString().toLowerCase();
+                return _search.isEmpty ||
+                    name.contains(_search) ||
+                    bio.contains(_search);
+              }).toList();
+
+              if (members.isEmpty) {
+                return Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: surface,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    children: [
+                      const Icon(Icons.people_outline, size: 38, color: pink),
+                      const SizedBox(height: 8),
+                      Text(
+                        _search.isEmpty
+                            ? 'Abhi doosre members nahi hain.'
+                            : 'Is search se koi member nahi mila.',
+                        textAlign: TextAlign.center,
                       ),
-                      child: Column(
-                        children: [
-                          CircleAvatar(
-                            radius: 29,
-                            backgroundColor: const Color(0xFFFFD8E6),
-                            child: Text(
-                              name.isNotEmpty ? name[0].toUpperCase() : '?',
-                              style: const TextStyle(
-                                color: pink,
-                                fontSize: 23,
-                                fontWeight: FontWeight.bold,
+                      if (_search.isNotEmpty)
+                        TextButton(
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _search = '');
+                          },
+                          child: const Text('Search clear karo'),
+                        ),
+                    ],
+                  ),
+                );
+              }
+
+              return SizedBox(
+                height: 145,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: members.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    final doc = members[index];
+                    final data = doc.data();
+                    final name =
+                        (data['displayName'] as String?)?.trim().isNotEmpty ==
+                            true
+                        ? (data['displayName'] as String).trim()
+                        : 'DilSe User';
+                    final bio = (data['bio'] ?? '').toString();
+                    final photoValue = (data['photoUrl'] ?? '')
+                        .toString()
+                        .trim();
+                    final photoUrl = photoValue.isEmpty ? null : photoValue;
+                    final avatarValue = (data['avatarId'] ?? '').toString();
+                    final avatarId = avatarValue.isEmpty ? null : avatarValue;
+
+                    return SizedBox(
+                      width: 100,
+                      child: Material(
+                        color: surface,
+                        borderRadius: BorderRadius.circular(18),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(18),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => PublicUserProfilePage(
+                                userId: doc.id,
+                                name: name,
+                                bio: bio,
                               ),
                             ),
                           ),
-                          const SizedBox(height: 7),
-                          Text(
-                            name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          const Text(
-                            'View profile',
-                            style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.white70,
+                          child: Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                CircleAvatar(
+                                  radius: 30,
+                                  backgroundColor: const Color(0xFFFFD8E6),
+                                  backgroundImage:
+                                      photoUrl != null && photoUrl.isNotEmpty
+                                      ? NetworkImage(photoUrl)
+                                      : null,
+                                  child: photoUrl == null || photoUrl.isEmpty
+                                      ? Text(
+                                          avatarId != null &&
+                                                  avatarId.isNotEmpty
+                                              ? dilseAvatarEmoji(avatarId)
+                                              : (name.isNotEmpty
+                                                    ? name[0].toUpperCase()
+                                                    : '?'),
+                                          style: const TextStyle(
+                                            color: pink,
+                                            fontSize: 23,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(height: 5),
+                                StreamBuilder<DatabaseEvent>(
+                                  stream: dilseRealtimeDatabase
+                                      .ref('status/${doc.id}')
+                                      .onValue,
+                                  builder: (context, statusSnapshot) {
+                                    final value =
+                                        statusSnapshot.data?.snapshot.value;
+                                    final statusData = value is Map
+                                        ? value
+                                        : null;
+                                    final isOnline =
+                                        statusData?['state'] == 'online';
+                                    return Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          width: 7,
+                                          height: 7,
+                                          decoration: BoxDecoration(
+                                            color: isOnline
+                                                ? Colors.greenAccent
+                                                : Colors.white38,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          isOnline ? 'Online' : 'Offline',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: isOnline
+                                                ? Colors.greenAccent
+                                                : Colors.white60,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 3),
+                                const Text(
+                                  'View profile',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.white60,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
-                  );
-                }).toList(),
+                    );
+                  },
+                ),
               );
             },
           ),
-        ),
-        const SizedBox(height: 24),
-        const SectionTitle('DilSe par kya naya hai?', 'Explore'),
-        const SizedBox(height: 12),
-        const FeatureCard(
-          icon: Icons.people_alt,
-          title: 'Naye dost banao',
-          subtitle: 'Real members ki profiles dekho',
-          color: purple,
-        ),
-        const FeatureCard(
-          icon: Icons.chat_rounded,
-          title: 'Dil khol kar baat karo',
-          subtitle: 'Private chat ka experience',
-          color: pink,
-        ),
-        const FeatureCard(
-          icon: Icons.mic,
-          title: 'Live Voice Rooms',
-          subtitle: 'Voice rooms ka feature abhi taiyar karna baaki hai',
-          color: Color(0xFF269B8D),
-        ),
-        const SizedBox(height: 16),
-        const Center(
-          child: Text(
-            'Nayi yaari, nayi kahani ❤️',
-            style: TextStyle(color: Colors.white70),
+          const SizedBox(height: 25),
+          const SectionTitle('DilSe par kya kar sakte ho?', 'Explore'),
+          const SizedBox(height: 12),
+          FeatureCard(
+            icon: Icons.people_alt_rounded,
+            title: 'Naye dost banao',
+            subtitle: 'Members ki profiles dekho aur apne jaise log khojo.',
+            color: purple,
+            onTap: () => _openTab(1),
           ),
-        ),
-      ],
+          FeatureCard(
+            icon: Icons.chat_rounded,
+            title: 'Private chat',
+            subtitle: 'Apni conversations kholo aur message bhejo.',
+            color: pink,
+            onTap: () => _openTab(2),
+          ),
+          FeatureCard(
+            icon: Icons.mic_rounded,
+            title: 'Voice Rooms',
+            subtitle: 'Voice room section kholo.',
+            color: Color(0xFF269B8D),
+            onTap: () => _openTab(3),
+          ),
+          const SizedBox(height: 18),
+          const Center(
+            child: Text(
+              'DilSe — Dosti Jo Dil Tak Jaaye ❤️',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -635,54 +930,66 @@ class FeatureCard extends StatelessWidget {
   final IconData icon;
   final String title, subtitle;
   final Color color;
+  final VoidCallback? onTap;
+
   const FeatureCard({
     super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.color,
+    this.onTap,
   });
 
   @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.only(bottom: 10),
-    padding: const EdgeInsets.all(15),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(17),
-    ),
-    child: Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: color.withAlpha(25),
-            borderRadius: BorderRadius.circular(13),
-          ),
-          child: Icon(icon, color: color, size: 27),
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(17),
+    child: Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [surface, color.withValues(alpha: 0.12)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
         ),
-        const SizedBox(width: 13),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 15,
+        borderRadius: BorderRadius.circular(17),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withAlpha(25),
+              borderRadius: BorderRadius.circular(13),
+            ),
+            child: Icon(icon, color: color, size: 27),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                subtitle,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-            ],
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
           ),
-        ),
-        const Icon(Icons.arrow_forward_ios, size: 15, color: Colors.white54),
-      ],
+          const Icon(Icons.arrow_forward_ios, size: 15, color: Colors.white54),
+        ],
+      ),
     ),
   );
 }

@@ -5,6 +5,43 @@ import 'package:flutter/material.dart';
 const _pink = Color(0xFFFF3D9A);
 const _purple = Color(0xFF925CFF);
 
+String dilseAvatarEmoji(String? id) {
+  const boys = [
+    '👦🏻',
+    '👦🏼',
+    '👦🏽',
+    '👦🏾',
+    '👦🏿',
+    '🧑🏻',
+    '🧑🏼',
+    '🧑🏽',
+    '🧑🏾',
+    '🧑🏿',
+    '👨🏻‍🦱',
+    '👨🏽‍🦱',
+  ];
+  const girls = [
+    '👧🏻',
+    '👧🏼',
+    '👧🏽',
+    '👧🏾',
+    '👧🏿',
+    '🧑🏻‍🦰',
+    '🧑🏼‍🦰',
+    '🧑🏽‍🦰',
+    '👩🏻‍🦱',
+    '👩🏼‍🦱',
+    '👩🏽‍🦱',
+    '👩🏾‍🦱',
+  ];
+  if (id == null || id.length < 4) return '🙂';
+  final number = int.tryParse(id.substring(3));
+  if (number == null || number < 1 || number > 12) return '🙂';
+  if (id.startsWith('boy')) return boys[number - 1];
+  if (id.startsWith('girl')) return girls[number - 1];
+  return '🙂';
+}
+
 class FirestoreProfilePage extends StatefulWidget {
   const FirestoreProfilePage({super.key});
 
@@ -13,11 +50,41 @@ class FirestoreProfilePage extends StatefulWidget {
 }
 
 class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
+  static const _boyAvatars = [
+    '👦🏻',
+    '👦🏼',
+    '👦🏽',
+    '👦🏾',
+    '👦🏿',
+    '🧑🏻',
+    '🧑🏼',
+    '🧑🏽',
+    '🧑🏾',
+    '🧑🏿',
+    '👨🏻‍🦱',
+    '👨🏽‍🦱',
+  ];
+  static const _girlAvatars = [
+    '👧🏻',
+    '👧🏼',
+    '👧🏽',
+    '👧🏾',
+    '👧🏿',
+    '🧑🏻‍🦰',
+    '🧑🏼‍🦰',
+    '🧑🏽‍🦰',
+    '👩🏻‍🦱',
+    '👩🏼‍🦱',
+    '👩🏽‍🦱',
+    '👩🏾‍🦱',
+  ];
+
   final _name = TextEditingController();
   final _bio = TextEditingController();
   bool _loading = true;
   bool _saving = false;
   String? _error;
+  String _selectedAvatar = 'boy1';
 
   @override
   void initState() {
@@ -53,6 +120,7 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
           user.displayName ??
           (user.email?.split('@').first ?? 'DilSe User');
       final bio = (data?['bio'] as String?) ?? '';
+      _selectedAvatar = (data?['avatarId'] as String?) ?? 'boy1';
 
       if (!snapshot.exists) {
         await ref.set({
@@ -74,6 +142,39 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  String _avatarEmoji(String id) {
+    if (id.startsWith('girl')) {
+      final index = int.tryParse(id.substring(4)) ?? 1;
+      return _girlAvatars[(index - 1).clamp(0, _girlAvatars.length - 1)];
+    }
+    final index = int.tryParse(id.substring(3)) ?? 1;
+    return _boyAvatars[(index - 1).clamp(0, _boyAvatars.length - 1)];
+  }
+
+  Widget _avatarChoice(String id, String emoji) {
+    final selected = _selectedAvatar == id;
+    return InkWell(
+      onTap: _saving ? null : () => setState(() => _selectedAvatar = id),
+      borderRadius: BorderRadius.circular(30),
+      child: Container(
+        width: 52,
+        height: 52,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected
+              ? _purple.withValues(alpha: 0.3)
+              : const Color(0xFF292333),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(
+            color: selected ? _pink : Colors.white24,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Text(emoji, style: const TextStyle(fontSize: 29)),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -104,7 +205,7 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
         'uid': user.uid,
         'displayName': name,
         'bio': bio,
-        'photoUrl': '',
+        'avatarId': _selectedAvatar,
         'searchName': name.toLowerCase(),
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -141,11 +242,62 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
           ),
         ),
         const SizedBox(height: 20),
-        const Center(
-          child: CircleAvatar(
-            radius: 43,
-            backgroundColor: Color(0xFF45233F),
-            child: Icon(Icons.person, size: 48, color: _pink),
+        Center(
+          child: Column(
+            children: [
+              CircleAvatar(
+                radius: 42,
+                backgroundColor: const Color(0xFF45233F),
+                child: Text(
+                  _avatarEmoji(_selectedAvatar),
+                  style: const TextStyle(fontSize: 42),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Apna Avatar Chuno ❤️',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Boys 👦',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: List.generate(_boyAvatars.length, (i) {
+                  final id = 'boy${i + 1}';
+                  return _avatarChoice(id, _boyAvatars[i]);
+                }),
+              ),
+              const SizedBox(height: 16),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'Girls 👧',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: List.generate(_girlAvatars.length, (i) {
+                  final id = 'girl${i + 1}';
+                  return _avatarChoice(id, _girlAvatars[i]);
+                }),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Avatar choose karne ke baad Save Profile dabao.',
+                style: TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 18),
@@ -185,11 +337,6 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
         FilledButton(
           onPressed: _saving || _loading ? null : _save,
           child: Text(_saving ? 'Saving...' : 'Save Profile'),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'Abhi naam aur bio save hote hain. Profile photo upload agle step mein connect karenge.',
-          style: TextStyle(color: Colors.white70, fontSize: 12),
         ),
       ],
     );
@@ -303,9 +450,12 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
 
                         return Card(
                           child: ListTile(
-                            leading: const CircleAvatar(
-                              backgroundColor: Color(0xFF45233F),
-                              child: Icon(Icons.person, color: _pink),
+                            leading: CircleAvatar(
+                              backgroundColor: const Color(0xFF45233F),
+                              child: Text(
+                                dilseAvatarEmoji(data['avatarId'] as String?),
+                                style: const TextStyle(fontSize: 27),
+                              ),
                             ),
                             title: Text(name),
                             subtitle: Text(bio.isEmpty ? 'DilSe member' : bio),
