@@ -499,6 +499,7 @@ class _HomePageState extends State<HomePage> {
                                 userId: doc.id,
                                 name: name,
                                 bio: bio,
+                                avatarId: avatarId,
                               ),
                             ),
                           ),

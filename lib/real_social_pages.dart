@@ -222,6 +222,7 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
           ),
         ),
         const SizedBox(height: 18),
+        const AdminFreeChatAccessSection(),
         const ProfileSocialTools(),
         const SizedBox(height: 16),
         const DilSeSettingsSection(),
@@ -264,6 +265,259 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
           child: Text(_saving ? 'Saving...' : 'Save Profile'),
         ),
       ],
+    );
+  }
+}
+
+class AdminFreeChatAccessSection extends StatefulWidget {
+  const AdminFreeChatAccessSection({super.key});
+
+  @override
+  State<AdminFreeChatAccessSection> createState() =>
+      _AdminFreeChatAccessSectionState();
+}
+
+class _AdminFreeChatAccessSectionState
+    extends State<AdminFreeChatAccessSection> {
+  final _search = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _setAccess(String uid, String adminUid, bool enabled) async {
+    final ref = FirebaseFirestore.instance
+        .collection('freeChatAccess')
+        .doc(uid);
+
+    await ref.set({
+      'active': enabled,
+      'grantedBy': adminUid,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !user.emailVerified) {
+      return const SizedBox.shrink();
+    }
+
+    final db = FirebaseFirestore.instance;
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: db.collection('admins').doc(user.uid).snapshots(),
+      builder: (context, adminSnapshot) {
+        if (!adminSnapshot.hasData || !adminSnapshot.data!.exists) {
+          return const SizedBox.shrink();
+        }
+
+        return Card(
+          child: ExpansionTile(
+            leading: const Icon(Icons.admin_panel_settings),
+            title: const Text('Admin Panel'),
+            subtitle: const Text('Free Chat Access manage karo'),
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: TextField(
+                  controller: _search,
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: const InputDecoration(
+                    labelText: 'User ka naam search karo',
+                    prefixIcon: Icon(Icons.search),
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              if (_query.trim().length >= 2)
+                SizedBox(
+                  height: 300,
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: db
+                        .collection('users')
+                        .orderBy('searchName')
+                        .startAt([_query.trim().toLowerCase()])
+                        .endAt(['${_query.trim().toLowerCase()}\uf8ff'])
+                        .limit(20)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return const Center(
+                          child: Text('Users load nahi hue.'),
+                        );
+                      }
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final users = snapshot.data!.docs
+                          .where((doc) => doc.id != user.uid)
+                          .toList();
+
+                      if (users.isEmpty) {
+                        return const Center(child: Text('Koi user nahi mila.'));
+                      }
+
+                      return ListView.builder(
+                        itemCount: users.length,
+                        itemBuilder: (context, index) {
+                          final profile = users[index];
+                          final name =
+                              profile.data()['displayName'] as String? ??
+                              'DilSe User';
+
+                          return FutureBuilder<
+                            DocumentSnapshot<Map<String, dynamic>>
+                          >(
+                            future: db
+                                .collection('freeChatAccess')
+                                .doc(profile.id)
+                                .get(),
+                            builder: (context, accessSnapshot) {
+                              final active =
+                                  accessSnapshot.data?.data()?['active'] ==
+                                  true;
+
+                              return ListTile(
+                                title: Text(name),
+                                subtitle: Text(
+                                  active
+                                      ? 'Unlimited free chat ON'
+                                      : 'Free chat OFF',
+                                ),
+                                trailing: IconButton(
+                                  tooltip: active
+                                      ? 'Revoke free chat'
+                                      : 'Grant free chat',
+                                  icon: Icon(
+                                    active ? Icons.lock : Icons.lock_open,
+                                  ),
+                                  onPressed: !accessSnapshot.hasData
+                                      ? null
+                                      : () async {
+                                          try {
+                                            await _setAccess(
+                                              profile.id,
+                                              user.uid,
+                                              !active,
+                                            );
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                    SnackBar(
+                                                      content: Text(
+                                                        active
+                                                            ? 'Free chat permission hata di.'
+                                                            : 'Unlimited free chat de di.',
+                                                      ),
+                                                    ),
+                                                  );
+                                              setState(() {});
+                                            }
+                                          } catch (_) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                        'Permission update fail. Admin rules check karo.',
+                                                      ),
+                                                    ),
+                                                  );
+                                            }
+                                          }
+                                        },
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                  ),
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('Search ke liye kam se kam 2 letters likho.'),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PremiumPlansPage extends StatelessWidget {
+  const PremiumPlansPage({super.key});
+
+  static const plans = <Map<String, Object>>[
+    {'name': 'Monthly', 'price': '₹99', 'duration': '1 month'},
+    {'name': '3 Months', 'price': '₹200', 'duration': '3 months'},
+    {'name': '6 Months', 'price': '₹500', 'duration': '6 months'},
+    {'name': 'Yearly', 'price': '₹1,000', 'duration': '12 months'},
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('DilSe Premium 👑')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text(
+            'Apna Premium Plan Chuno ❤️',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Premium plans ki details',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 20),
+          ...plans.map(
+            (plan) => Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                leading: const Icon(Icons.workspace_premium, color: _pink),
+                title: Text(
+                  plan['name']! as String,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(plan['duration']! as String),
+                trailing: Text(
+                  plan['price']! as String,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: _pink,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                'Payment abhi available nahi hai. Purchase aur payment verification '
+                'securely integrate hone ke baad hi Premium khareed paoge. '
+                'Abhi payment mat karo.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -355,6 +609,15 @@ class DilSeSettingsSection extends StatelessWidget {
             () => info(
               'Help & Support',
               'Login ya chat problem ho to app restart karke dobara try karo.',
+            ),
+          ),
+          option(
+            Icons.workspace_premium,
+            'DilSe Premium',
+            '₹99 se ₹1,000 tak ke plans dekho',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PremiumPlansPage()),
             ),
           ),
           option(
@@ -555,10 +818,25 @@ class MyFriendsPage extends StatelessWidget {
                             );
                             if (ok != true || !context.mounted) return;
                             try {
-                              await row.value.update({
-                                'status': 'ended',
-                                'updatedAt': FieldValue.serverTimestamp(),
-                              });
+                              final db = FirebaseFirestore.instance;
+                              final batch = db.batch();
+                              for (final requestId in [
+                                '${me.uid}_${row.key}',
+                                '${row.key}_${me.uid}',
+                              ]) {
+                                final ref = db
+                                    .collection('friendRequests')
+                                    .doc(requestId);
+                                final request = await ref.get();
+                                if (request.exists &&
+                                    request.data()?['status'] == 'accepted') {
+                                  batch.update(ref, {
+                                    'status': 'ended',
+                                    'updatedAt': FieldValue.serverTimestamp(),
+                                  });
+                                }
+                              }
+                              await batch.commit();
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
@@ -784,13 +1062,24 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Discover Friends 💕',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: _purple,
-                ),
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Discover Friends 💕',
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: _purple,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Refresh profiles',
+                    onPressed: _loadHiddenUsers,
+                    icon: const Icon(Icons.refresh, color: _purple),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               TextField(
@@ -869,15 +1158,19 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
                             title: Text(name),
                             subtitle: Text(bio.isEmpty ? 'DilSe member' : bio),
                             trailing: const Icon(Icons.chevron_right),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => PublicUserProfilePage(
-                                  userId: users[index].id,
-                                  name: name,
-                                  bio: bio,
+                            onTap: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => PublicUserProfilePage(
+                                    userId: users[index].id,
+                                    name: name,
+                                    bio: bio,
+                                    avatarId: data["avatarId"] as String?,
+                                  ),
                                 ),
-                              ),
-                            ),
+                              );
+                              await _loadHiddenUsers();
+                            },
                           ),
                         );
                       },
@@ -973,9 +1266,16 @@ class FriendRequestsPage extends StatelessWidget {
               final data = doc.data();
               return Card(
                 child: ListTile(
-                  leading: const CircleAvatar(
-                    child: Icon(Icons.person_add_alt_1),
-                  ),
+                  leading:
+                      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance
+                            .collection("users")
+                            .doc(data["senderId"] as String? ?? "")
+                            .snapshots(),
+                        builder: (context, profile) => dilseAvatar(
+                          profile.data?.data()?["avatarId"] as String?,
+                        ),
+                      ),
                   title: Text(data['senderName'] as String? ?? 'DilSe member'),
                   subtitle: const Text('Friend request bheji hai'),
                   trailing: Wrap(
@@ -1011,11 +1311,13 @@ class FriendRequestsPage extends StatelessWidget {
 
 class PublicUserProfilePage extends StatelessWidget {
   final String userId, name, bio;
+  final String? avatarId;
   const PublicUserProfilePage({
     super.key,
     required this.userId,
     required this.name,
     required this.bio,
+    this.avatarId,
   });
 
   @override
@@ -1026,7 +1328,7 @@ class PublicUserProfilePage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const CircleAvatar(radius: 45, child: Icon(Icons.person, size: 48)),
+          Center(child: dilseAvatar(avatarId)),
           const SizedBox(height: 16),
           Center(
             child: Text(
@@ -1149,21 +1451,50 @@ class PublicUserProfilePage extends StatelessWidget {
                     );
                     if (confirm != true || !context.mounted) return;
                     try {
-                      await FirebaseFirestore.instance
+                      final db = FirebaseFirestore.instance;
+                      final blockRef = db
                           .collection('blocks')
-                          .doc('${me.uid}_$userId')
-                          .set({
-                            'blockerId': me.uid,
-                            'blockedUserId': userId,
-                            'createdAt': FieldValue.serverTimestamp(),
+                          .doc('${me.uid}_$userId');
+                      final existingBlock = await blockRef.get();
+                      final batch = db.batch();
+                      if (!existingBlock.exists) {
+                        batch.set(blockRef, {
+                          'blockerId': me.uid,
+                          'blockedUserId': userId,
+                          'createdAt': FieldValue.serverTimestamp(),
+                        });
+                      }
+
+                      for (final requestId in [
+                        '${me.uid}_$userId',
+                        '${userId}_${me.uid}',
+                      ]) {
+                        final ref = db
+                            .collection('friendRequests')
+                            .doc(requestId);
+                        final request = await ref.get();
+                        if (request.exists &&
+                            request.data()?['status'] == 'accepted') {
+                          batch.update(ref, {
+                            'status': 'ended',
+                            'updatedAt': FieldValue.serverTimestamp(),
                           });
+                        }
+                      }
+
+                      await batch.commit();
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('User blocked')),
+                          const SnackBar(
+                            content: Text(
+                              'User blocked aur friend list se hata diya.',
+                            ),
+                          ),
                         );
                         Navigator.pop(context);
                       }
-                    } catch (_) {
+                    } catch (e) {
+                      debugPrint('DilSe block failed: $e');
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
@@ -1296,6 +1627,7 @@ class _DirectChatPageState extends State<DirectChatPage> {
       final chat = db.collection('chats').doc(_chatId);
       final usage = db.collection('chatUsage').doc(user.uid);
       final subscription = db.collection('subscriptions').doc(user.uid);
+      final freeAccess = db.collection('freeChatAccess').doc(user.uid);
       final message = chat.collection('messages').doc();
       final participants = [user.uid, widget.otherUserId]..sort();
 
@@ -1320,6 +1652,7 @@ class _DirectChatPageState extends State<DirectChatPage> {
       await db.runTransaction((tx) async {
         final usageSnap = await tx.get(usage);
         final subscriptionSnap = await tx.get(subscription);
+        final freeAccessSnap = await tx.get(freeAccess);
         final chatSnap = await tx.get(chat);
 
         if (!chatSnap.exists) {
@@ -1329,9 +1662,10 @@ class _DirectChatPageState extends State<DirectChatPage> {
         final sub = subscriptionSnap.data();
         final expiry = sub?['expiresAt'];
         final premium =
-            sub?['active'] == true &&
-            expiry is Timestamp &&
-            expiry.toDate().isAfter(DateTime.now());
+            (sub?['active'] == true &&
+                expiry is Timestamp &&
+                expiry.toDate().isAfter(DateTime.now())) ||
+            freeAccessSnap.data()?['active'] == true;
 
         final sent = (usageSnap.data()?['messagesSent'] as num?)?.toInt() ?? 0;
         if (!premium && sent >= 10) {
@@ -1374,7 +1708,7 @@ class _DirectChatPageState extends State<DirectChatPage> {
           SnackBar(
             content: Text(
               limitReached
-                  ? '10 free messages complete. Chat ke liye ₹99 / 30-day Pass chahiye.'
+                  ? '10 free messages complete. Chat ke liye DilSe Premium plan chahiye.'
                   : userBlocked
                   ? 'Message nahi bhej sakte: aap mein se kisi ne doosre ko block kiya hai.'
                   : 'Message send nahi hua. Firestore rules aur connection check karein.',
@@ -1402,7 +1736,24 @@ class _DirectChatPageState extends State<DirectChatPage> {
         .orderBy('createdAt', descending: true);
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.otherName)),
+      appBar: AppBar(
+        title: Row(
+          children: [
+            StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection("users")
+                  .doc(widget.otherUserId)
+                  .snapshots(),
+              builder: (context, profile) => dilseAvatar(
+                profile.data?.data()?["avatarId"] as String?,
+                radius: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(child: Text(widget.otherName)),
+          ],
+        ),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -1537,9 +1888,8 @@ class FirestoreChatsPage extends StatelessWidget {
                     ? (counts[user.uid] as num?)?.toInt() ?? 0
                     : 0;
                 return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: const Color(0xFFFFE3F0),
-                    child: const Icon(Icons.person, color: Color(0xFFE94E91)),
+                  leading: dilseAvatar(
+                    profile.data?.data()?["avatarId"] as String?,
                   ),
                   title: Text(name),
                   subtitle: Text(data['lastMessage'] as String? ?? ''),
