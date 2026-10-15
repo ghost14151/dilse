@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 const _pink = Color(0xFFFF3D9A);
 const _purple = Color(0xFF925CFF);
@@ -85,6 +87,8 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
   bool _saving = false;
   String? _error;
   String _selectedAvatar = 'boy1';
+String? _photoUrl;
+XFile? _pickedPhoto;
 
   @override
   void initState() {
@@ -121,6 +125,7 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
           (user.email?.split('@').first ?? 'DilSe User');
       final bio = (data?['bio'] as String?) ?? '';
       _selectedAvatar = (data?['avatarId'] as String?) ?? 'boy1';
+      _photoUrl = data?['photoUrl'] as String?;
 
       if (!snapshot.exists) {
         await ref.set({
@@ -177,6 +182,21 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
     );
   }
 
+  Future<void> _pickPhoto() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 80,
+        maxWidth: 1200,
+      );
+      if (picked != null && mounted) {
+        setState(() => _pickedPhoto = picked);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Photo select nahi hui: $e');
+    }
+  }
+
   Future<void> _save() async {
     final user = FirebaseAuth.instance.currentUser;
     final name = _name.text.trim();
@@ -201,10 +221,23 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
     });
 
     try {
+      String? photoUrl = _photoUrl;
+      if (_pickedPhoto != null) {
+        final ref = FirebaseStorage.instance
+            .ref()
+            .child('profile_photos/${user.uid}/profile.jpg');
+        await ref.putData(
+          await _pickedPhoto!.readAsBytes(),
+          SettableMetadata(contentType: 'image/jpeg'),
+        );
+        photoUrl = await ref.getDownloadURL();
+      }
+
       await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
         'uid': user.uid,
         'displayName': name,
         'bio': bio,
+        'photoUrl': photoUrl ?? '',
         'avatarId': _selectedAvatar,
         'searchName': name.toLowerCase(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -245,13 +278,29 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
         Center(
           child: Column(
             children: [
-              CircleAvatar(
-                radius: 42,
-                backgroundColor: const Color(0xFF45233F),
-                child: Text(
-                  _avatarEmoji(_selectedAvatar),
-                  style: const TextStyle(fontSize: 42),
+              GestureDetector(
+                onTap: _saving ? null : _pickPhoto,
+                child: CircleAvatar(
+                  radius: 48,
+                  backgroundColor: const Color(0xFF45233F),
+                  backgroundImage: _photoUrl != null && _photoUrl!.isNotEmpty
+                      ? NetworkImage(_photoUrl!)
+                      : null,
+                  child: _photoUrl == null || _photoUrl!.isEmpty
+                      ? Text(
+                          _avatarEmoji(_selectedAvatar),
+                          style: const TextStyle(fontSize: 42),
+                        )
+                      : null,
                 ),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _saving ? null : _pickPhoto,
+                icon: const Icon(Icons.photo_library_outlined),
+                label: Text(_pickedPhoto == null
+                    ? 'Gallery se photo chuno'
+                    : 'Photo selected — Save Profile dabao'),
               ),
               const SizedBox(height: 12),
               const Text(
