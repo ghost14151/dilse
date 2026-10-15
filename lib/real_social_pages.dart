@@ -308,6 +308,10 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
           ),
         ),
         const SizedBox(height: 18),
+        const ProfileSocialTools(),
+        const SizedBox(height: 16),
+        const DilSeSettingsSection(),
+        const SizedBox(height: 18),
         Text(
           user?.email ?? '',
           textAlign: TextAlign.center,
@@ -346,6 +350,434 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
           child: Text(_saving ? 'Saving...' : 'Save Profile'),
         ),
       ],
+    );
+  }
+}
+
+class DilSeSettingsSection extends StatelessWidget {
+  const DilSeSettingsSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget option(
+      IconData icon,
+      String title,
+      String subtitle,
+      VoidCallback tap,
+    ) {
+      return ListTile(
+        leading: Icon(icon, color: _pink),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: tap,
+      );
+    }
+
+    void info(String title, String message) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: Text(title)),
+            body: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(child: Text(message, textAlign: TextAlign.center)),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      child: Column(
+        children: [
+          const ListTile(
+            leading: Icon(Icons.settings, color: _purple),
+            title: Text('Settings & Safety'),
+            subtitle: Text('Account, privacy and support'),
+          ),
+          const Divider(height: 1),
+          option(
+            Icons.lock_outline,
+            'Account & Privacy',
+            'Account security information',
+            () => info(
+              'Account & Privacy',
+              'Verified email se login karo aur apna password private rakho.',
+            ),
+          ),
+          option(
+            Icons.notifications_outlined,
+            'Notifications',
+            'Friend requests',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const FriendRequestsPage()),
+            ),
+          ),
+          option(
+            Icons.block_outlined,
+            'Blocked Users',
+            'Manage blocked accounts',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BlockedUsersPage()),
+            ),
+          ),
+          option(
+            Icons.flag_outlined,
+            'Report a Problem',
+            'Report suspicious profiles',
+            () => info(
+              'Report a Problem',
+              'User ki profile kholo aur Report profile option chuno.',
+            ),
+          ),
+          option(
+            Icons.help_outline,
+            'Help & Support',
+            'Basic help',
+            () => info(
+              'Help & Support',
+              'Login ya chat problem ho to app restart karke dobara try karo.',
+            ),
+          ),
+          option(
+            Icons.info_outline,
+            'About DilSe',
+            'Dosti Jo Dil Tak Jaaye ❤️',
+            () => info('About DilSe', 'DilSe ❤️\nDosti Jo Dil Tak Jaaye'),
+          ),
+          const Divider(height: 1),
+          option(Icons.logout, 'Log Out', 'Sign out of DilSe', () async {
+            final yes = await showDialog<bool>(
+              context: context,
+              builder: (c) => AlertDialog(
+                title: const Text('Log Out?'),
+                content: const Text('Kya tum logout karna chahte ho?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(c, false),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(c, true),
+                    child: const Text('Log Out'),
+                  ),
+                ],
+              ),
+            );
+            if (yes == true) await FirebaseAuth.instance.signOut();
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+class ProfileSocialTools extends StatelessWidget {
+  const ProfileSocialTools({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null || !me.emailVerified) return const SizedBox.shrink();
+
+    final pending = FirebaseFirestore.instance
+        .collection('friendRequests')
+        .where('receiverId', isEqualTo: me.uid)
+        .where('status', isEqualTo: 'pending')
+        .snapshots();
+
+    return Card(
+      child: Column(
+        children: [
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: pending,
+            builder: (context, snap) => ListTile(
+              leading: const Icon(Icons.person_add_alt_1, color: _purple),
+              title: const Text('Friend Requests'),
+              subtitle: Text('${snap.data?.docs.length ?? 0} pending'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const FriendRequestsPage()),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.people_alt, color: _pink),
+            title: const Text('My Friends'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const MyFriendsPage()),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.block, color: Colors.redAccent),
+            title: const Text('Blocked Users'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const BlockedUsersPage()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MyFriendsPage extends StatelessWidget {
+  const MyFriendsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null || !me.emailVerified) {
+      return const Scaffold(
+        body: Center(child: Text('Verified login zaroori hai.')),
+      );
+    }
+
+    final db = FirebaseFirestore.instance;
+    final outgoing = db
+        .collection('friendRequests')
+        .where('senderId', isEqualTo: me.uid)
+        .where('status', isEqualTo: 'accepted')
+        .snapshots();
+    final incoming = db
+        .collection('friendRequests')
+        .where('receiverId', isEqualTo: me.uid)
+        .where('status', isEqualTo: 'accepted')
+        .snapshots();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('My Friends 👥')),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: outgoing,
+        builder: (context, a) {
+          if (a.hasError) {
+            return const Center(
+              child: Text('Friends load nahi hue. Rules/index check karo.'),
+            );
+          }
+          if (!a.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: incoming,
+            builder: (context, b) {
+              if (b.hasError) {
+                return const Center(
+                  child: Text('Friends load nahi hue. Rules/index check karo.'),
+                );
+              }
+              if (!b.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final friends =
+                  <String, DocumentReference<Map<String, dynamic>>>{};
+              for (final d in a.data!.docs) {
+                final id = d.data()['receiverId'] as String? ?? '';
+                if (id.isNotEmpty) friends[id] = d.reference;
+              }
+              for (final d in b.data!.docs) {
+                final id = d.data()['senderId'] as String? ?? '';
+                if (id.isNotEmpty) friends[id] = d.reference;
+              }
+
+              if (friends.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'Abhi friends nahi hain. Discover se request bhejo 💕',
+                  ),
+                );
+              }
+
+              final rows = friends.entries.toList();
+              return ListView.builder(
+                itemCount: rows.length,
+                itemBuilder: (context, i) {
+                  final row = rows[i];
+                  return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    future: db.collection('users').doc(row.key).get(),
+                    builder: (context, u) {
+                      final data = u.data?.data();
+                      final name =
+                          data?['displayName'] as String? ?? 'DilSe member';
+                      return ListTile(
+                        leading: CircleAvatar(
+                          child: Text(
+                            dilseAvatarEmoji(data?['avatarId'] as String?),
+                          ),
+                        ),
+                        title: Text(name),
+                        subtitle: Text(data?['bio'] as String? ?? ''),
+                        trailing: IconButton(
+                          tooltip: 'Unfriend',
+                          icon: const Icon(
+                            Icons.person_remove_alt_1,
+                            color: Colors.redAccent,
+                          ),
+                          onPressed: () async {
+                            final ok = await showDialog<bool>(
+                              context: context,
+                              builder: (c) => AlertDialog(
+                                title: const Text('Unfriend?'),
+                                content: Text(
+                                  'Kya $name ko friends list se hatana hai?',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(c, false),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () => Navigator.pop(c, true),
+                                    child: const Text('Unfriend'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (ok != true || !context.mounted) return;
+                            try {
+                              await row.value.update({
+                                'status': 'ended',
+                                'updatedAt': FieldValue.serverTimestamp(),
+                              });
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Friend list se hata diya.'),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Unfriend fail: $e')),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class BlockedUsersPage extends StatelessWidget {
+  const BlockedUsersPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null || !me.emailVerified) {
+      return const Scaffold(
+        body: Center(child: Text('Verified login zaroori hai.')),
+      );
+    }
+
+    final blocked = FirebaseFirestore.instance
+        .collection('blocks')
+        .where('blockerId', isEqualTo: me.uid)
+        .snapshots();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Blocked Users 🚫')),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: blocked,
+        builder: (context, snap) {
+          if (snap.hasError) {
+            return const Center(
+              child: Text(
+                'Blocked list load nahi hui. Firestore rules check karo.',
+              ),
+            );
+          }
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final docs = snap.data!.docs;
+          if (docs.isEmpty) {
+            return const Center(child: Text('Koi blocked user nahi hai.'));
+          }
+
+          return ListView.builder(
+            itemCount: docs.length,
+            itemBuilder: (context, i) {
+              final doc = docs[i];
+              final uid = doc.data()['blockedUserId'] as String? ?? '';
+              return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                future: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
+                    .get(),
+                builder: (context, u) {
+                  final name =
+                      u.data?.data()?['displayName'] as String? ??
+                      'DilSe member';
+                  return ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.block)),
+                    title: Text(name),
+                    trailing: OutlinedButton(
+                      child: const Text('Unblock'),
+                      onPressed: () async {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (c) => AlertDialog(
+                            title: const Text('Unblock user?'),
+                            content: Text('$name ko unblock karna hai?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(c, false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(c, true),
+                                child: const Text('Unblock'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (ok != true || !context.mounted) return;
+                        try {
+                          await doc.reference.delete();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('User unblock ho gaya.'),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Unblock fail: $e')),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 }
@@ -488,7 +920,6 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
   }
 }
 
-
 class FriendRequestsPage extends StatelessWidget {
   const FriendRequestsPage({super.key});
 
@@ -506,17 +937,23 @@ class FriendRequestsPage extends StatelessWidget {
       });
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(status == 'accepted'
-              ? 'Friend request accept ho gayi!'
-              : 'Friend request reject ho gayi.')),
+          SnackBar(
+            content: Text(
+              status == 'accepted'
+                  ? 'Friend request accept ho gayi!'
+                  : 'Friend request reject ho gayi.',
+            ),
+          ),
         );
       }
     } catch (_) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(
-            'Action nahi hua. Firestore rules publish/check karo.',
-          )),
+          const SnackBar(
+            content: Text(
+              'Action nahi hua. Firestore rules publish/check karo.',
+            ),
+          ),
         );
       }
     }
@@ -543,18 +980,20 @@ class FriendRequestsPage extends StatelessWidget {
         stream: requests,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return const Center(child: Text(
-              'Requests load nahi hue. Firestore rules/index check karo.',
-            ));
+            return const Center(
+              child: Text(
+                'Requests load nahi hue. Firestore rules/index check karo.',
+              ),
+            );
           }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           final docs = snapshot.data?.docs ?? [];
           if (docs.isEmpty) {
-            return const Center(child: Text(
-              'Abhi koi new friend request nahi hai 💕',
-            ));
+            return const Center(
+              child: Text('Abhi koi new friend request nahi hai 💕'),
+            );
           }
           return ListView.builder(
             padding: const EdgeInsets.all(16),
@@ -562,7 +1001,7 @@ class FriendRequestsPage extends StatelessWidget {
             itemBuilder: (context, i) {
               final doc = docs[i];
               final data = doc.data();
-                  return Card(
+              return Card(
                 child: ListTile(
                   leading: const CircleAvatar(
                     child: Icon(Icons.person_add_alt_1),
@@ -575,12 +1014,18 @@ class FriendRequestsPage extends StatelessWidget {
                       IconButton(
                         tooltip: 'Accept',
                         onPressed: () => _respond(context, doc, 'accepted'),
-                        icon: const Icon(Icons.check_circle, color: Colors.green),
+                        icon: const Icon(
+                          Icons.check_circle,
+                          color: Colors.green,
+                        ),
                       ),
                       IconButton(
                         tooltip: 'Reject',
                         onPressed: () => _respond(context, doc, 'rejected'),
-                        icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                        icon: const Icon(
+                          Icons.cancel_outlined,
+                          color: Colors.red,
+                        ),
                       ),
                     ],
                   ),
@@ -630,16 +1075,22 @@ class PublicUserProfilePage extends StatelessWidget {
                 final db = FirebaseFirestore.instance;
                 final requestId = '${me.uid}_$userId';
                 try {
-                  final blockA = await db.collection('blocks')
-                      .doc('${me.uid}_$userId').get();
-                  final blockB = await db.collection('blocks')
-                      .doc('${userId}_${me.uid}').get();
+                  final blockA = await db
+                      .collection('blocks')
+                      .doc('${me.uid}_$userId')
+                      .get();
+                  final blockB = await db
+                      .collection('blocks')
+                      .doc('${userId}_${me.uid}')
+                      .get();
                   if (blockA.exists || blockB.exists) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text(
-                          'Block hone ki wajah se request nahi bhej sakte.',
-                        )),
+                        const SnackBar(
+                          content: Text(
+                            'Block hone ki wajah se request nahi bhej sakte.',
+                          ),
+                        ),
                       );
                     }
                     return;
@@ -649,7 +1100,9 @@ class PublicUserProfilePage extends StatelessWidget {
                   if (old.exists && old.data()?['status'] == 'pending') {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Request pehle se pending hai.')),
+                        const SnackBar(
+                          content: Text('Request pehle se pending hai.'),
+                        ),
                       );
                     }
                     return;
@@ -670,9 +1123,9 @@ class PublicUserProfilePage extends StatelessWidget {
                 } catch (e) {
                   debugPrint('DilSe friend request failed: $e');
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Request fail: $e')),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text('Request fail: $e')));
                   }
                 }
               },

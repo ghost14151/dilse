@@ -128,7 +128,12 @@ service cloud.firestore {
     }
 
     match /friendRequests/{requestId} {
-      allow read: if verifiedUser()
+      allow get: if verifiedUser()
+        && (!exists(/databases/$(database)/documents/friendRequests/$(requestId))
+            || resource.data.senderId == request.auth.uid
+            || resource.data.receiverId == request.auth.uid);
+
+      allow list: if verifiedUser()
         && (resource.data.senderId == request.auth.uid
             || resource.data.receiverId == request.auth.uid);
 
