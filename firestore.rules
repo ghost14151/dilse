@@ -100,8 +100,11 @@ service cloud.firestore {
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0
           && request.resource.data.text.size() <= 4000
+          && request.resource.data.readBy is list
+          && request.resource.data.readBy.size() == 1
+          && request.auth.uid in request.resource.data.readBy
           && request.resource.data.keys().hasOnly([
-            'senderId', 'text', 'createdAt'
+            'senderId', 'text', 'createdAt', 'readBy'
           ])
           && (
             (hasActiveSubscription(request.auth.uid) || hasFreeChatAccess(request.auth.uid))
@@ -121,7 +124,37 @@ service cloud.firestore {
             )
           );
 
-        allow update, delete: if false;
+        allow update: if chatMember(chatId) && (
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readBy'])
+            && request.auth.uid != resource.data.senderId
+            && request.resource.data.readBy is list
+            && request.auth.uid in request.resource.data.readBy
+            && (
+              (!('readBy' in resource.data.keys())
+                && request.resource.data.readBy.size() == 1)
+              ||
+              ('readBy' in resource.data.keys()
+                && resource.data.readBy is list
+                && request.resource.data.readBy.toSet().hasAll(resource.data.readBy.toSet())
+                && request.resource.data.readBy.toSet().size() == resource.data.readBy.toSet().size() + 1
+                && !(request.auth.uid in resource.data.readBy))
+            )
+          )
+          ||
+          (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt'])
+            && resource.data.senderId == request.auth.uid
+            && request.resource.data.senderId == resource.data.senderId
+            && request.resource.data.text is string
+            && request.resource.data.text.size() > 0
+            && request.resource.data.text.size() <= 4000
+            && request.resource.data.editedAt is timestamp
+          )
+        );
+
+        allow delete: if chatMember(chatId)
+          && resource.data.senderId == request.auth.uid;
       }
     }
 

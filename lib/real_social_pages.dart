@@ -2062,6 +2062,123 @@ class _DirectChatPageState extends State<DirectChatPage> {
     super.dispose();
   }
 
+  Future<void> _editMessage(
+    DocumentReference<Map<String, dynamic>> ref,
+    String oldText,
+  ) async {
+    final controller = TextEditingController(text: oldText);
+    final replacement = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit message'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 4000,
+          maxLines: 5,
+          decoration: const InputDecoration(hintText: 'Message'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (replacement == null ||
+        replacement.isEmpty ||
+        replacement == oldText.trim() ||
+        !mounted) {
+      return;
+    }
+
+    try {
+      await ref.update({
+        'text': replacement,
+        'editedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message edit nahi hua. Rules check karein.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteMessage(
+    DocumentReference<Map<String, dynamic>> ref,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete message?'),
+        content: const Text('Yeh message permanently delete ho jayega.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.delete();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message delete nahi hua. Rules check karein.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showMessageActions(
+    DocumentReference<Map<String, dynamic>> ref,
+    String text,
+  ) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('Edit message'),
+              onTap: () => Navigator.pop(sheetContext, 'edit'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete message'),
+              onTap: () => Navigator.pop(sheetContext, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (action == 'edit') await _editMessage(ref, text);
+    if (action == 'delete') await _deleteMessage(ref);
+  }
+
   Future<void> _send() async {
     final user = FirebaseAuth.instance.currentUser;
     final text = _input.text.trim();
@@ -2271,85 +2388,93 @@ class _DirectChatPageState extends State<DirectChatPage> {
                       alignment: mine
                           ? Alignment.centerRight
                           : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 5),
-                        padding: const EdgeInsets.fromLTRB(14, 10, 12, 7),
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * .80,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: mine
-                              ? const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Color(0xFFE94E91),
-                                    Color(0xFF7556D9),
-                                  ],
-                                )
-                              : null,
-                          color: mine ? null : const Color(0xFF1B2035),
-                          border: Border.all(
-                            color: mine
-                                ? const Color(0x55FFB6DC)
-                                : const Color(0xFF303650),
-                          ),
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(18),
-                            topRight: const Radius.circular(18),
-                            bottomLeft: Radius.circular(mine ? 18 : 5),
-                            bottomRight: Radius.circular(mine ? 5 : 18),
-                          ),
-                          boxShadow: mine
-                              ? [
-                                  BoxShadow(
-                                    color: const Color(0xFFE94E91)
-                                        .withValues(alpha: .15),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
+                      child: GestureDetector(
+                        onLongPress: mine
+                            ? () => _showMessageActions(
+                                docs[i].reference,
                                 d['text'] as String? ?? '',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  height: 1.4,
-                                  fontSize: 15,
+                              )
+                            : null,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 5),
+                          padding: const EdgeInsets.fromLTRB(14, 10, 12, 7),
+                          constraints: BoxConstraints(
+                            maxWidth: MediaQuery.of(context).size.width * .80,
+                          ),
+                          decoration: BoxDecoration(
+                            gradient: mine
+                                ? const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFFE94E91),
+                                      Color(0xFF7556D9),
+                                    ],
+                                  )
+                                : null,
+                            color: mine ? null : const Color(0xFF1B2035),
+                            border: Border.all(
+                              color: mine
+                                  ? const Color(0x55FFB6DC)
+                                  : const Color(0xFF303650),
+                            ),
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(18),
+                              topRight: const Radius.circular(18),
+                              bottomLeft: Radius.circular(mine ? 18 : 5),
+                              bottomRight: Radius.circular(mine ? 5 : 18),
+                            ),
+                            boxShadow: mine
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(0xFFE94E91)
+                                          .withValues(alpha: .15),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  d['text'] as String? ?? '',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    height: 1.4,
+                                    fontSize: 15,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  time,
-                                  style: const TextStyle(
-                                    color: Color(0xCCFFFFFF),
-                                    fontSize: 10,
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    time,
+                                    style: const TextStyle(
+                                      color: Color(0xCCFFFFFF),
+                                      fontSize: 10,
+                                    ),
                                   ),
-                                ),
-                                if (mine) ...[
-                                  const SizedBox(width: 4),
-                                  Icon(
-                                    isRead ? Icons.done_all : Icons.done,
-                                    size: 14,
-                                    color: isRead
-                                        ? const Color(0xFFB7F7FF)
-                                        : const Color(0xCCFFFFFF),
-                                  ),
+                                  if (mine) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      isRead ? Icons.done_all : Icons.done,
+                                      size: 14,
+                                      color: isRead
+                                          ? const Color(0xFFB7F7FF)
+                                          : const Color(0xCCFFFFFF),
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -2425,8 +2550,15 @@ class _DirectChatPageState extends State<DirectChatPage> {
   }
 }
 
-class FirestoreChatsPage extends StatelessWidget {
+class FirestoreChatsPage extends StatefulWidget {
   const FirestoreChatsPage({super.key});
+
+  @override
+  State<FirestoreChatsPage> createState() => _FirestoreChatsPageState();
+}
+
+class _FirestoreChatsPageState extends State<FirestoreChatsPage> {
+  bool _showHidden = false;
 
   @override
   Widget build(BuildContext context) {
@@ -2450,7 +2582,8 @@ class FirestoreChatsPage extends StatelessWidget {
         }
         final visibleChats = snap.data!.docs.where((doc) {
           final hiddenBy = doc.data()['hiddenBy'];
-          return !(hiddenBy is Map && hiddenBy[user.uid] == true);
+          final isHidden = hiddenBy is Map && hiddenBy[user.uid] == true;
+          return _showHidden ? isHidden : !isHidden;
         }).toList();
         if (visibleChats.isEmpty) {
           return const Center(
@@ -2458,95 +2591,117 @@ class FirestoreChatsPage extends StatelessWidget {
           );
         }
         return ListView(
-          children: visibleChats.map((doc) {
-            final data = doc.data();
-            final ids = List<String>.from(data['participants'] ?? []);
-            final other = ids.where((id) => id != user.uid).firstOrNull;
-            if (other == null) return const SizedBox.shrink();
-            return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              future: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(other)
-                  .get(),
-              builder: (context, profile) {
-                final name =
-                    profile.data?.data()?['displayName'] as String? ??
-                    'DilSe User';
-                final counts = data['unreadCounts'];
-                final unread = counts is Map
-                    ? (counts[user.uid] as num?)?.toInt() ?? 0
-                    : 0;
-                return ListTile(
-                  leading: dilseAvatar(
-                    profile.data?.data()?["avatarId"] as String?,
-                  ),
-                  title: Text(name),
-                  subtitle: Text(data['lastMessage'] as String? ?? ''),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (unread > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE94E91),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            unread > 99 ? '99+' : '$unread',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: OutlinedButton.icon(
+                onPressed: () => setState(() => _showHidden = !_showHidden),
+                icon: Icon(
+                  _showHidden
+                      ? Icons.chat_bubble_outline
+                      : Icons.visibility_off_outlined,
+                ),
+                label: Text(_showHidden ? 'Back to Chats' : 'Hidden Chats'),
+              ),
+            ),
+            ...visibleChats.map((doc) {
+              final data = doc.data();
+              final ids = List<String>.from(data['participants'] ?? []);
+              final other = ids.where((id) => id != user.uid).firstOrNull;
+              if (other == null) return const SizedBox.shrink();
+              return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                future: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(other)
+                    .get(),
+                builder: (context, profile) {
+                  final name =
+                      profile.data?.data()?['displayName'] as String? ??
+                      'DilSe User';
+                  final counts = data['unreadCounts'];
+                  final unread = counts is Map
+                      ? (counts[user.uid] as num?)?.toInt() ?? 0
+                      : 0;
+                  return ListTile(
+                    leading: dilseAvatar(
+                      profile.data?.data()?["avatarId"] as String?,
+                    ),
+                    title: Text(name),
+                    subtitle: Text(data['lastMessage'] as String? ?? ''),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (unread > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE94E91),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              unread > 99 ? '99+' : '$unread',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
+                        if (unread > 0) const SizedBox(width: 4),
+                        PopupMenuButton<String>(
+                          tooltip: 'Chat options',
+                          onSelected: (value) async {
+                            if (value != 'hide' && value != 'unhide') return;
+                            try {
+                              await doc.reference.update({
+                                'hiddenBy.${user.uid}': value == 'hide',
+                              });
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      value == 'hide'
+                                          ? 'Chat hidden'
+                                          : 'Chat restored',
+                                    ),
+                                  ),
+                                );
+                              }
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Chat hide nahi ho payi.'),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                          itemBuilder: (_) => [
+                            PopupMenuItem(
+                              value: _showHidden ? 'unhide' : 'hide',
+                              child: Text(
+                                _showHidden ? 'Unhide chat' : 'Hide chat',
+                              ),
+                            ),
+                          ],
                         ),
-                      if (unread > 0) const SizedBox(width: 4),
-                      PopupMenuButton<String>(
-                        tooltip: 'Chat options',
-                        onSelected: (value) async {
-                          if (value != 'hide') return;
-                          try {
-                            await doc.reference.update({
-                              'hiddenBy.${user.uid}': true,
-                            });
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Chat hidden')),
-                              );
-                            }
-                          } catch (_) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Chat hide nahi ho payi.'),
-                                ),
-                              );
-                            }
-                          }
-                        },
-                        itemBuilder: (_) => const [
-                          PopupMenuItem(
-                            value: 'hide',
-                            child: Text('Hide chat'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          DirectChatPage(otherUserId: other, otherName: name),
+                      ],
                     ),
-                  ),
-                );
-              },
-            );
-          }).toList(),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            DirectChatPage(otherUserId: other, otherName: name),
+                      ),
+                    ),
+                  );
+                },
+              );
+            }),
+          ],
         );
       },
     );
