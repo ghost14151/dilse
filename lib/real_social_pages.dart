@@ -769,8 +769,22 @@ class ProfileSocialTools extends StatelessWidget {
   }
 }
 
-class MyFriendsPage extends StatelessWidget {
+class MyFriendsPage extends StatefulWidget {
   const MyFriendsPage({super.key});
+
+  @override
+  State<MyFriendsPage> createState() => _MyFriendsPageState();
+}
+
+class _MyFriendsPageState extends State<MyFriendsPage> {
+  final TextEditingController _search = TextEditingController();
+  int _filter = 0;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -794,135 +808,424 @@ class MyFriendsPage extends StatelessWidget {
         .snapshots();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('My Friends 👥')),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: outgoing,
-        builder: (context, a) {
-          if (a.hasError) {
-            return const Center(
-              child: Text('Friends load nahi hue. Rules/index check karo.'),
-            );
-          }
-          if (!a.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: incoming,
-            builder: (context, b) {
-              if (b.hasError) {
-                return const Center(
-                  child: Text('Friends load nahi hue. Rules/index check karo.'),
-                );
-              }
-              if (!b.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              final friends =
-                  <String, DocumentReference<Map<String, dynamic>>>{};
-              for (final d in a.data!.docs) {
-                final id = d.data()['receiverId'] as String? ?? '';
-                if (id.isNotEmpty) friends[id] = d.reference;
-              }
-              for (final d in b.data!.docs) {
-                final id = d.data()['senderId'] as String? ?? '';
-                if (id.isNotEmpty) friends[id] = d.reference;
-              }
-
-              if (friends.isEmpty) {
-                return const Center(
-                  child: Text(
-                    'Abhi friends nahi hain. Discover se request bhejo 💕',
+      backgroundColor: const Color(0xFF160F2D),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF21143F),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: const Text(
+          'My Friends 👥',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF49216F), Color(0xFF21143F)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(26),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Apni DilSe family 💕',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                );
-              }
-
-              final rows = friends.entries.toList();
-              return ListView.builder(
-                itemCount: rows.length,
-                itemBuilder: (context, i) {
-                  final row = rows[i];
-                  return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                    future: db.collection('users').doc(row.key).get(),
-                    builder: (context, u) {
-                      final data = u.data?.data();
-                      final name =
-                          data?['displayName'] as String? ?? 'DilSe member';
-                      return ListTile(
-                        leading: dilseAvatar(data?['avatarId'] as String?),
-                        title: Text(name),
-                        subtitle: Text(data?['bio'] as String? ?? ''),
-                        trailing: IconButton(
-                          tooltip: 'Unfriend',
-                          icon: const Icon(
-                            Icons.person_remove_alt_1,
-                            color: Colors.redAccent,
-                          ),
-                          onPressed: () async {
-                            final ok = await showDialog<bool>(
-                              context: context,
-                              builder: (c) => AlertDialog(
-                                title: const Text('Unfriend?'),
-                                content: Text(
-                                  'Kya $name ko friends list se hatana hai?',
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(c, false),
-                                    child: const Text('Cancel'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: () => Navigator.pop(c, true),
-                                    child: const Text('Unfriend'),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (ok != true || !context.mounted) return;
-                            try {
-                              final db = FirebaseFirestore.instance;
-                              final batch = db.batch();
-                              for (final requestId in [
-                                '${me.uid}_${row.key}',
-                                '${row.key}_${me.uid}',
-                              ]) {
-                                final ref = db
-                                    .collection('friendRequests')
-                                    .doc(requestId);
-                                final request = await ref.get();
-                                if (request.exists &&
-                                    request.data()?['status'] == 'accepted') {
-                                  batch.update(ref, {
-                                    'status': 'ended',
-                                    'updatedAt': FieldValue.serverTimestamp(),
-                                  });
-                                }
-                              }
-                              await batch.commit();
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Friend list se hata diya.'),
-                                  ),
-                                );
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Unfriend fail: $e')),
-                                );
-                              }
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Apne doston se jude raho',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: _search,
+                    onChanged: (_) => setState(() {}),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Friend ka naam search karo...',
+                      hintStyle: const TextStyle(color: Colors.white60),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: Color(0xFFFF5AA5),
+                      ),
+                      filled: true,
+                      fillColor: Colors.white.withValues(alpha: 0.10),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      _filterChip('All Friends', 0),
+                      _filterChip('Online', 1),
+                      _filterChip('Requests', 2),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _filter == 2
+                  ? _requestsShortcut(context)
+                  : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                      stream: outgoing,
+                      builder: (context, a) {
+                        if (a.hasError) {
+                          return _message(
+                            'Friends load nahi hue. Internet ya rules check karo.',
+                          );
+                        }
+                        if (!a.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFFFF5AA5),
+                            ),
+                          );
+                        }
+                        return StreamBuilder<
+                          QuerySnapshot<Map<String, dynamic>>
+                        >(
+                          stream: incoming,
+                          builder: (context, b) {
+                            if (b.hasError) {
+                              return _message('Friends load nahi hue.');
                             }
+                            if (!b.hasData) {
+                              return const Center(
+                                child: CircularProgressIndicator(
+                                  color: Color(0xFFFF5AA5),
+                                ),
+                              );
+                            }
+
+                            final friends =
+                                <
+                                  String,
+                                  DocumentReference<Map<String, dynamic>>
+                                >{};
+                            for (final d in a.data!.docs) {
+                              final id =
+                                  d.data()['receiverId'] as String? ?? '';
+                              if (id.isNotEmpty) friends[id] = d.reference;
+                            }
+                            for (final d in b.data!.docs) {
+                              final id = d.data()['senderId'] as String? ?? '';
+                              if (id.isNotEmpty) friends[id] = d.reference;
+                            }
+
+                            if (friends.isEmpty) {
+                              return _message(
+                                'Abhi friends nahi hain.\nDiscover se request bhejo 💕',
+                              );
+                            }
+
+                            final rows = friends.entries.toList();
+                            return ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(
+                                14,
+                                14,
+                                14,
+                                24,
+                              ),
+                              itemCount: rows.length,
+                              itemBuilder: (context, i) {
+                                final row = rows[i];
+                                return FutureBuilder<
+                                  DocumentSnapshot<Map<String, dynamic>>
+                                >(
+                                  future: db
+                                      .collection('users')
+                                      .doc(row.key)
+                                      .get(),
+                                  builder: (context, u) {
+                                    final data = u.data?.data();
+                                    final name =
+                                        data?['displayName'] as String? ??
+                                        'DilSe member';
+                                    final bio = data?['bio'] as String? ?? '';
+                                    final online = data?['isOnline'] == true;
+
+                                    if (_filter == 1 && !online) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    if (!name.toLowerCase().contains(
+                                      _search.text.trim().toLowerCase(),
+                                    )) {
+                                      return const SizedBox.shrink();
+                                    }
+
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF261A43),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: const Color(0xFF7556D9)
+                                              .withValues(alpha: 0.55),
+                                        ),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Row(
+                                          children: [
+                                            Stack(
+                                              children: [
+                                                dilseAvatar(
+                                                  data?['avatarId'] as String?,
+                                                  radius: 27,
+                                                ),
+                                                if (online)
+                                                  Positioned(
+                                                    right: 0,
+                                                    bottom: 0,
+                                                    child: Container(
+                                                      width: 13,
+                                                      height: 13,
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(
+                                                          0xFF39D98A,
+                                                        ),
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color: const Color(
+                                                            0xFF261A43,
+                                                          ),
+                                                          width: 2,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    name,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 16,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    bio.isEmpty
+                                                        ? (online
+                                                              ? 'Online'
+                                                              : 'DilSe friend')
+                                                        : bio,
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      color: online
+                                                          ? const Color(
+                                                              0xFF67E8A5,
+                                                            )
+                                                          : Colors.white60,
+                                                      fontSize: 12,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            IconButton(
+                                              tooltip: 'Unfriend',
+                                              icon: const Icon(
+                                                Icons.person_remove_alt_1,
+                                                color: Color(0xFFFF6B8A),
+                                              ),
+                                              onPressed: () async {
+                                                final ok = await showDialog<bool>(
+                                                  context: context,
+                                                  builder: (c) => AlertDialog(
+                                                    title: const Text(
+                                                      'Unfriend?',
+                                                    ),
+                                                    content: Text(
+                                                      'Kya $name ko friends list se hatana hai?',
+                                                    ),
+                                                    actions: [
+                                                      TextButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                              c,
+                                                              false,
+                                                            ),
+                                                        child: const Text(
+                                                          'Cancel',
+                                                        ),
+                                                      ),
+                                                      FilledButton(
+                                                        onPressed: () =>
+                                                            Navigator.pop(
+                                                              c,
+                                                              true,
+                                                            ),
+                                                        child: const Text(
+                                                          'Unfriend',
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                                if (ok != true ||
+                                                    !context.mounted) {
+                                                  return;
+                                                }
+                                                try {
+                                                  final batch = db.batch();
+                                                  for (final requestId in [
+                                                    '${me.uid}_${row.key}',
+                                                    '${row.key}_${me.uid}',
+                                                  ]) {
+                                                    final ref = db
+                                                        .collection(
+                                                          'friendRequests',
+                                                        )
+                                                        .doc(requestId);
+                                                    final request = await ref
+                                                        .get();
+                                                    if (request.exists &&
+                                                        request.data()?['status'] ==
+                                                            'accepted') {
+                                                      batch.update(ref, {
+                                                        'status': 'ended',
+                                                        'updatedAt':
+                                                            FieldValue.serverTimestamp(),
+                                                      });
+                                                    }
+                                                  }
+                                                  await batch.commit();
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text(
+                                                          'Friend list se hata diya.',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                } catch (e) {
+                                                  if (context.mounted) {
+                                                    ScaffoldMessenger.of(
+                                                      context,
+                                                    ).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text(
+                                                          'Unfriend fail: $e',
+                                                        ),
+                                                      ),
+                                                    );
+                                                  }
+                                                }
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            );
                           },
-                        ),
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          );
-        },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, int value) {
+    final selected = _filter == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => setState(() => _filter = value),
+      selectedColor: const Color(0xFFFF3D9A),
+      backgroundColor: const Color(0xFF33224F),
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : Colors.white70,
+        fontWeight: FontWeight.w600,
+      ),
+      side: BorderSide.none,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+    );
+  }
+
+  Widget _message(String text) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white70, fontSize: 15),
+      ),
+    ),
+  );
+
+  Widget _requestsShortcut(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.mark_email_unread_rounded,
+              color: Color(0xFFFF5AA5),
+              size: 56,
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Friend Requests',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Requests dekhne ke liye Profile ke Friend Requests section mein jao.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.white70),
+            ),
+          ],
+        ),
       ),
     );
   }
