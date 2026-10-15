@@ -488,6 +488,113 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
   }
 }
 
+
+class FriendRequestsPage extends StatelessWidget {
+  const FriendRequestsPage({super.key});
+
+  Future<void> _respond(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+    String status,
+  ) async {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null || !me.emailVerified) return;
+    try {
+      await doc.reference.update({
+        'status': status,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(status == 'accepted'
+              ? 'Friend request accept ho gayi!'
+              : 'Friend request reject ho gayi.')),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(
+            'Action nahi hua. Firestore rules publish/check karo.',
+          )),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null || !me.emailVerified) {
+      return const Scaffold(
+        body: Center(child: Text('Verified login zaroori hai.')),
+      );
+    }
+
+    final requests = FirebaseFirestore.instance
+        .collection('friendRequests')
+        .where('receiverId', isEqualTo: me.uid)
+        .where('status', isEqualTo: 'pending')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Requests & Notifications 🔔')),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: requests,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text(
+              'Requests load nahi hue. Firestore rules/index check karo.',
+            ));
+          }
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final docs = snapshot.data?.docs ?? [];
+          if (docs.isEmpty) {
+            return const Center(child: Text(
+              'Abhi koi new friend request nahi hai 💕',
+            ));
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: docs.length,
+            itemBuilder: (context, i) {
+              final doc = docs[i];
+              final data = doc.data();
+                  return Card(
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.person_add_alt_1),
+                  ),
+                  title: Text(data['senderName'] as String? ?? 'DilSe member'),
+                  subtitle: const Text('Friend request bheji hai'),
+                  trailing: Wrap(
+                    spacing: 4,
+                    children: [
+                      IconButton(
+                        tooltip: 'Accept',
+                        onPressed: () => _respond(context, doc, 'accepted'),
+                        icon: const Icon(Icons.check_circle, color: Colors.green),
+                      ),
+                      IconButton(
+                        tooltip: 'Reject',
+                        onPressed: () => _respond(context, doc, 'rejected'),
+                        icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 class PublicUserProfilePage extends StatelessWidget {
   final String userId, name, bio;
   const PublicUserProfilePage({
@@ -516,6 +623,71 @@ class PublicUserProfilePage extends StatelessWidget {
           const SizedBox(height: 8),
           Center(child: Text(bio.isEmpty ? 'DilSe member' : bio)),
           const SizedBox(height: 24),
+          if (me != null && me.emailVerified && me.uid != userId)
+            FilledButton.icon(
+              icon: const Icon(Icons.person_add_alt_1),
+              label: const Text('Send Friend Request'),
+              onPressed: () async {
+                final db = FirebaseFirestore.instance;
+                final requestId = '${me.uid}_$userId';
+                try {
+                  final blockA = await db.collection('blocks')
+                      .doc('${me.uid}_$userId').get();
+                  final blockB = await db.collection('blocks')
+                      .doc('${userId}_${me.uid}').get();
+                  if (blockA.exists || blockB.exists) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text(
+                          'Block hone ki wajah se request nahi bhej sakte.',
+                        )),
+                      );
+                    }
+                    return;
+                  }
+                  final ref = db.collection('friendRequests').doc(requestId);
+                  final old = await ref.get();
+                  if (old.exists && old.data()?['status'] == 'pending') {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Request pehle se pending hai.')),
+                      );
+                    }
+                    return;
+                  }
+                  await ref.set({
+                    'senderId': me.uid,
+                    'receiverId': userId,
+                    'senderName': me.displayName ?? 'DilSe member',
+                    'status': 'pending',
+                    'createdAt': FieldValue.serverTimestamp(),
+                    'updatedAt': FieldValue.serverTimestamp(),
+                  });
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Friend request bhej di!')),
+                    );
+                  }
+                } catch (_) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text(
+                        'Request nahi bheji gayi. Firestore rules publish/check karo.',
+                      )),
+                    );
+                  }
+                }
+              },
+            ),
+          if (me != null && me.emailVerified)
+            OutlinedButton.icon(
+              icon: const Icon(Icons.notifications_active_outlined),
+              label: const Text('Requests & Notifications'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const FriendRequestsPage()),
+              ),
+            ),
+          const SizedBox(height: 12),
           FilledButton.icon(
             icon: const Icon(Icons.chat),
             label: const Text('Private Message'),

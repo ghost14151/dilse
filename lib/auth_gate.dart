@@ -44,17 +44,19 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
       await user.sendEmailVerification();
-      if (mounted)
+      if (mounted) {
         setState(
           () => message =
               'Verification link bhej diya. Gmail aur Spam folder check karo.',
         );
+      }
     } on FirebaseAuthException catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => message =
               e.message ?? 'Email nahi bhej paye. Thodi der baad try karo.',
         );
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -77,11 +79,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         );
       }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => message =
               'Check nahi ho paya. Internet check karke dobara try karo.',
         );
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }
