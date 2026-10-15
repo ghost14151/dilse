@@ -774,13 +774,14 @@ class _DirectChatPageState extends State<DirectChatPage> {
                         decoration: BoxDecoration(
                           color: mine
                               ? const Color(0xFF7556D9)
-                              : Colors.black12,
+                              : const Color(0xFF25283A),
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Text(
                           d['text'] as String? ?? '',
                           style: TextStyle(
-                            color: mine ? Colors.white : Colors.black87,
+                            color: Colors.white,
+                            height: 1.35,
                           ),
                         ),
                       ),
