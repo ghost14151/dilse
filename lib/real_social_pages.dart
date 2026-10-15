@@ -792,6 +792,62 @@ class FirestoreDiscoverPage extends StatefulWidget {
 class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
   final _search = TextEditingController();
   String _query = '';
+  Set<String> _hiddenUserIds = {};
+  bool _privacyLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHiddenUsers();
+  }
+
+  Future<void> _loadHiddenUsers() async {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null) return;
+
+    try {
+      final db = FirebaseFirestore.instance;
+      final results = await Future.wait([
+        db.collection('friendRequests')
+            .where('senderId', isEqualTo: me.uid)
+            .where('status', isEqualTo: 'accepted').get(),
+        db.collection('friendRequests')
+            .where('receiverId', isEqualTo: me.uid)
+            .where('status', isEqualTo: 'accepted').get(),
+        db.collection('blocks')
+            .where('blockerId', isEqualTo: me.uid).get(),
+        db.collection('blocks')
+            .where('blockedUserId', isEqualTo: me.uid).get(),
+      ]);
+
+      final hidden = <String>{};
+      for (final doc in results[0].docs) {
+        final id = doc.data()['receiverId'] as String?;
+        if (id != null) hidden.add(id);
+      }
+      for (final doc in results[1].docs) {
+        final id = doc.data()['senderId'] as String?;
+        if (id != null) hidden.add(id);
+      }
+      for (final doc in results[2].docs) {
+        final id = doc.data()['blockedUserId'] as String?;
+        if (id != null) hidden.add(id);
+      }
+      for (final doc in results[3].docs) {
+        final id = doc.data()['blockerId'] as String?;
+        if (id != null) hidden.add(id);
+      }
+
+      if (mounted) {
+        setState(() {
+          _hiddenUserIds = hidden;
+          _privacyLoaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _privacyLoaded = true);
+    }
+  }
 
   @override
   void dispose() {
@@ -866,8 +922,16 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
                       return const Center(child: CircularProgressIndicator());
                     }
 
+                    if (!_privacyLoaded) {
+                      return const Center(
+                        child: CircularProgressIndicator(),
+                      );
+                    }
+
                     final users = snapshot.data!.docs
-                        .where((doc) => doc.id != user.uid)
+                        .where((doc) =>
+                            doc.id != user.uid &&
+                            !_hiddenUserIds.contains(doc.id))
                         .toList();
 
                     if (users.isEmpty) {
