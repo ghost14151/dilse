@@ -667,12 +667,11 @@ class PublicUserProfilePage extends StatelessWidget {
                       const SnackBar(content: Text('Friend request bhej di!')),
                     );
                   }
-                } catch (_) {
+                } catch (e) {
+                  debugPrint('DilSe friend request failed: $e');
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text(
-                        'Request nahi bheji gayi. Firestore rules publish/check karo.',
-                      )),
+                      SnackBar(content: Text('Request fail: $e')),
                     );
                   }
                 }
