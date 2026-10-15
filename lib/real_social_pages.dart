@@ -535,7 +535,6 @@ class FriendRequestsPage extends StatelessWidget {
         .collection('friendRequests')
         .where('receiverId', isEqualTo: me.uid)
         .where('status', isEqualTo: 'pending')
-        .orderBy('createdAt', descending: true)
         .snapshots();
 
     return Scaffold(

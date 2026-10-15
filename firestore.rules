@@ -127,9 +127,58 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /blocks/{blockId} {
+    match /friendRequests/{requestId} {
       allow read: if verifiedUser()
-        && (resource.data.blockerId == request.auth.uid
+        && (resource.data.senderId == request.auth.uid
+            || resource.data.receiverId == request.auth.uid);
+
+      allow create: if verifiedUser()
+        && request.resource.data.keys().hasOnly([
+          'senderId', 'receiverId', 'senderName', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.receiverId is string
+        && request.resource.data.receiverId != request.auth.uid
+        && requestId == request.auth.uid + '_' + request.resource.data.receiverId
+        && exists(/databases/$(database)/documents/users/$(request.resource.data.receiverId))
+        && request.resource.data.senderName is string
+        && request.resource.data.senderName.size() <= 40
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+
+      allow update: if verifiedUser()
+        && request.resource.data.keys().hasOnly([
+          'senderId', 'receiverId', 'senderName', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.senderId == resource.data.senderId
+        && request.resource.data.receiverId == resource.data.receiverId
+        && request.resource.data.senderName == resource.data.senderName
+        && requestId == resource.data.senderId + '_' + resource.data.receiverId
+        && (
+          (request.auth.uid == resource.data.receiverId
+            && resource.data.status == 'pending'
+            && request.resource.data.status in ['accepted', 'rejected']
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.updatedAt == request.time)
+          ||
+          (request.auth.uid == resource.data.senderId
+            && resource.data.status == 'rejected'
+            && request.resource.data.status == 'pending'
+            && request.resource.data.createdAt == request.time
+            && request.resource.data.updatedAt == request.time)
+        );
+
+      allow delete: if false;
+    }
+
+    match /blocks/{blockId} {
+      // Allow checking a missing block record; existing records stay private.
+      allow read: if verifiedUser()
+        && (!exists(/databases/$(database)/documents/blocks/$(blockId))
+            || resource.data.blockerId == request.auth.uid
             || resource.data.blockedUserId == request.auth.uid);
 
       allow create: if verifiedUser()
