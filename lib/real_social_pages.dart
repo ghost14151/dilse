@@ -446,10 +446,72 @@ class _AdminFreeChatAccessSectionState
                   padding: EdgeInsets.all(16),
                   child: Text('Search ke liye kam se kam 2 letters likho.'),
                 ),
+              const AdminReportsSection(),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class AdminReportsSection extends StatelessWidget {
+  const AdminReportsSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ExpansionTile(
+      leading: const Icon(Icons.flag_outlined),
+      title: const Text('User Reports'),
+      subtitle: const Text('Latest 50 reports'),
+      children: [
+        SizedBox(
+          height: 320,
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('reports')
+                .orderBy('createdAt', descending: true)
+                .limit(50)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return const Center(
+                  child: Text(
+                    'Reports load nahi hue. Firestore Rules check karo.',
+                  ),
+                );
+              }
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final reports = snapshot.data!.docs;
+              if (reports.isEmpty) {
+                return const Center(child: Text('Abhi koi report nahi hai.'));
+              }
+              return ListView.builder(
+                itemCount: reports.length,
+                itemBuilder: (context, index) {
+                  final report = reports[index].data();
+                  final time = report['createdAt'];
+                  final date = time is Timestamp
+                      ? time.toDate().toLocal().toString()
+                      : 'Time unavailable';
+                  return ListTile(
+                    leading: const Icon(Icons.report_gmailerrorred),
+                    title: Text('${report['reason'] ?? 'No reason'}'),
+                    subtitle: Text(
+                      'Target: ${report['targetUserId'] ?? '-'}\n'
+                      'Reporter: ${report['reporterId'] ?? '-'}\n'
+                      '$date',
+                    ),
+                    isThreeLine: true,
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1515,20 +1577,23 @@ class PublicUserProfilePage extends StatelessWidget {
                 : () async {
                     final reason = await showDialog<String>(
                       context: context,
-                      builder: (c) => AlertDialog(
+                      builder: (c) => SimpleDialog(
                         title: const Text('Report profile'),
-                        content: const Text(
-                          'Kya ye profile spam, fake ya inappropriate hai?',
-                        ),
-                        actions: [
-                          TextButton(
+                        children: [
+                          for (final reason in const [
+                            'Fake Profile',
+                            'Harassment / Bad Behaviour',
+                            'Inappropriate Content',
+                            'Fake Identity / Impersonation',
+                            'Other',
+                          ])
+                            SimpleDialogOption(
+                              onPressed: () => Navigator.pop(c, reason),
+                              child: Text(reason),
+                            ),
+                          SimpleDialogOption(
                             onPressed: () => Navigator.pop(c),
                             child: const Text('Cancel'),
-                          ),
-                          FilledButton(
-                            onPressed: () =>
-                                Navigator.pop(c, 'Spam or inappropriate'),
-                            child: const Text('Report'),
                           ),
                         ],
                       ),

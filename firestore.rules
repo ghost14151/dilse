@@ -241,7 +241,8 @@ service cloud.firestore {
         && request.resource.data.reporterId == request.auth.uid
         && request.resource.data.targetUserId is string
         && request.resource.data.reason is string;
-      allow read, update, delete: if false;
+      allow read: if isAdmin();
+      allow update, delete: if false;
     }
   }
 }
