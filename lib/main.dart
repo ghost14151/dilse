@@ -513,15 +513,20 @@ class _HomePageState extends State<HomePage> {
                                   backgroundImage:
                                       photoUrl != null && photoUrl.isNotEmpty
                                       ? NetworkImage(photoUrl)
+                                      : avatarId is String &&
+                                            avatarId.isNotEmpty
+                                      ? AssetImage(
+                                          'assets/avatars/avatar_${dilseAvatarIndex(avatarId).toString().padLeft(2, '0')}.jpg',
+                                        )
                                       : null,
-                                  child: photoUrl == null || photoUrl.isEmpty
+                                  child:
+                                      (photoUrl == null || photoUrl.isEmpty) &&
+                                          !(avatarId is String &&
+                                              avatarId.isNotEmpty)
                                       ? Text(
-                                          avatarId != null &&
-                                                  avatarId.isNotEmpty
-                                              ? dilseAvatarEmoji(avatarId)
-                                              : (name.isNotEmpty
-                                                    ? name[0].toUpperCase()
-                                                    : '?'),
+                                          name.isNotEmpty
+                                              ? name[0].toUpperCase()
+                                              : '?',
                                           style: const TextStyle(
                                             color: pink,
                                             fontSize: 23,

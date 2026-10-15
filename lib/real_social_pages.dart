@@ -5,41 +5,27 @@ import 'package:flutter/material.dart';
 const _pink = Color(0xFFFF3D9A);
 const _purple = Color(0xFF925CFF);
 
-String dilseAvatarEmoji(String? id) {
-  const boys = [
-    '👦🏻',
-    '👦🏼',
-    '👦🏽',
-    '👦🏾',
-    '👦🏿',
-    '🧑🏻',
-    '🧑🏼',
-    '🧑🏽',
-    '🧑🏾',
-    '🧑🏿',
-    '👨🏻‍🦱',
-    '👨🏽‍🦱',
-  ];
-  const girls = [
-    '👧🏻',
-    '👧🏼',
-    '👧🏽',
-    '👧🏾',
-    '👧🏿',
-    '🧑🏻‍🦰',
-    '🧑🏼‍🦰',
-    '🧑🏽‍🦰',
-    '👩🏻‍🦱',
-    '👩🏼‍🦱',
-    '👩🏽‍🦱',
-    '👩🏾‍🦱',
-  ];
-  if (id == null || id.length < 4) return '🙂';
-  final number = int.tryParse(id.substring(3));
-  if (number == null || number < 1 || number > 12) return '🙂';
-  if (id.startsWith('boy')) return boys[number - 1];
-  if (id.startsWith('girl')) return girls[number - 1];
-  return '🙂';
+int dilseAvatarIndex(String? id) {
+  if (id == null) return 1;
+  if (id.startsWith('avatar_')) {
+    return (int.tryParse(id.substring(7)) ?? 1).clamp(1, 16);
+  }
+  if (id.startsWith('girl')) {
+    return ((int.tryParse(id.substring(4)) ?? 1) + 12).clamp(1, 16);
+  }
+  if (id.startsWith('boy')) {
+    return (int.tryParse(id.substring(3)) ?? 1).clamp(1, 16);
+  }
+  return 1;
+}
+
+Widget dilseAvatar(String? id, {double radius = 22}) {
+  final n = dilseAvatarIndex(id).toString().padLeft(2, '0');
+  return CircleAvatar(
+    radius: radius,
+    backgroundColor: const Color(0xFF45233F),
+    backgroundImage: AssetImage('assets/avatars/avatar_$n.jpg'),
+  );
 }
 
 class FirestoreProfilePage extends StatefulWidget {
@@ -50,35 +36,6 @@ class FirestoreProfilePage extends StatefulWidget {
 }
 
 class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
-  static const _boyAvatars = [
-    '👦🏻',
-    '👦🏼',
-    '👦🏽',
-    '👦🏾',
-    '👦🏿',
-    '🧑🏻',
-    '🧑🏼',
-    '🧑🏽',
-    '🧑🏾',
-    '🧑🏿',
-    '👨🏻‍🦱',
-    '👨🏽‍🦱',
-  ];
-  static const _girlAvatars = [
-    '👧🏻',
-    '👧🏼',
-    '👧🏽',
-    '👧🏾',
-    '👧🏿',
-    '🧑🏻‍🦰',
-    '🧑🏼‍🦰',
-    '🧑🏽‍🦰',
-    '👩🏻‍🦱',
-    '👩🏼‍🦱',
-    '👩🏽‍🦱',
-    '👩🏾‍🦱',
-  ];
-
   final _name = TextEditingController();
   final _bio = TextEditingController();
   bool _loading = true;
@@ -120,7 +77,7 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
           user.displayName ??
           (user.email?.split('@').first ?? 'DilSe User');
       final bio = (data?['bio'] as String?) ?? '';
-      _selectedAvatar = (data?['avatarId'] as String?) ?? 'boy1';
+      _selectedAvatar = (data?['avatarId'] as String?) ?? 'avatar_01';
 
       if (!snapshot.exists) {
         await ref.set({
@@ -144,35 +101,26 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
     }
   }
 
-  String _avatarEmoji(String id) {
-    if (id.startsWith('girl')) {
-      final index = int.tryParse(id.substring(4)) ?? 1;
-      return _girlAvatars[(index - 1).clamp(0, _girlAvatars.length - 1)];
-    }
-    final index = int.tryParse(id.substring(3)) ?? 1;
-    return _boyAvatars[(index - 1).clamp(0, _boyAvatars.length - 1)];
-  }
-
-  Widget _avatarChoice(String id, String emoji) {
+  Widget _avatarChoice(String id) {
     final selected = _selectedAvatar == id;
+    final n = dilseAvatarIndex(id).toString().padLeft(2, '0');
     return InkWell(
       onTap: _saving ? null : () => setState(() => _selectedAvatar = id),
       borderRadius: BorderRadius.circular(30),
       child: Container(
-        width: 52,
-        height: 52,
-        alignment: Alignment.center,
+        width: 62,
+        height: 62,
+        padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          color: selected
-              ? _purple.withValues(alpha: 0.3)
-              : const Color(0xFF292333),
-          borderRadius: BorderRadius.circular(30),
+          borderRadius: BorderRadius.circular(32),
           border: Border.all(
             color: selected ? _pink : Colors.white24,
-            width: selected ? 2 : 1,
+            width: selected ? 3 : 1,
           ),
         ),
-        child: Text(emoji, style: const TextStyle(fontSize: 29)),
+        child: ClipOval(
+          child: Image.asset('assets/avatars/avatar_$n.jpg', fit: BoxFit.cover),
+        ),
       ),
     );
   }
@@ -245,19 +193,10 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
         Center(
           child: Column(
             children: [
-              GestureDetector(
-                child: CircleAvatar(
-                  radius: 48,
-                  backgroundColor: const Color(0xFF45233F),
-                  child: Text(
-                    _avatarEmoji(_selectedAvatar),
-                    style: const TextStyle(fontSize: 42),
-                  ),
-                ),
-              ),
+              GestureDetector(child: dilseAvatar(_selectedAvatar, radius: 48)),
               const SizedBox(height: 8),
               const Text(
-                'Free avatar use ho raha hai; photo upload filhaal band hai.',
+                'Apni pasand ka realistic avatar chuno ❤️',
                 style: TextStyle(color: Colors.white70, fontSize: 12),
               ),
               const SizedBox(height: 12),
@@ -266,37 +205,12 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Boys 👦',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 8),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: List.generate(_boyAvatars.length, (i) {
-                  final id = 'boy${i + 1}';
-                  return _avatarChoice(id, _boyAvatars[i]);
-                }),
-              ),
-              const SizedBox(height: 16),
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'Girls 👧',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: List.generate(_girlAvatars.length, (i) {
-                  final id = 'girl${i + 1}';
-                  return _avatarChoice(id, _girlAvatars[i]);
+                spacing: 10,
+                runSpacing: 10,
+                children: List.generate(16, (i) {
+                  final id = 'avatar_${(i + 1).toString().padLeft(2, '0')}';
+                  return _avatarChoice(id);
                 }),
               ),
               const SizedBox(height: 8),
@@ -610,11 +524,7 @@ class MyFriendsPage extends StatelessWidget {
                       final name =
                           data?['displayName'] as String? ?? 'DilSe member';
                       return ListTile(
-                        leading: CircleAvatar(
-                          child: Text(
-                            dilseAvatarEmoji(data?['avatarId'] as String?),
-                          ),
-                        ),
+                        leading: dilseAvatar(data?['avatarId'] as String?),
                         title: Text(name),
                         subtitle: Text(data?['bio'] as String? ?? ''),
                         trailing: IconButton(
@@ -808,16 +718,18 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
     try {
       final db = FirebaseFirestore.instance;
       final results = await Future.wait([
-        db.collection('friendRequests')
+        db
+            .collection('friendRequests')
             .where('senderId', isEqualTo: me.uid)
-            .where('status', isEqualTo: 'accepted').get(),
-        db.collection('friendRequests')
+            .where('status', isEqualTo: 'accepted')
+            .get(),
+        db
+            .collection('friendRequests')
             .where('receiverId', isEqualTo: me.uid)
-            .where('status', isEqualTo: 'accepted').get(),
-        db.collection('blocks')
-            .where('blockerId', isEqualTo: me.uid).get(),
-        db.collection('blocks')
-            .where('blockedUserId', isEqualTo: me.uid).get(),
+            .where('status', isEqualTo: 'accepted')
+            .get(),
+        db.collection('blocks').where('blockerId', isEqualTo: me.uid).get(),
+        db.collection('blocks').where('blockedUserId', isEqualTo: me.uid).get(),
       ]);
 
       final hidden = <String>{};
@@ -923,15 +835,15 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
                     }
 
                     if (!_privacyLoaded) {
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
+                      return const Center(child: CircularProgressIndicator());
                     }
 
                     final users = snapshot.data!.docs
-                        .where((doc) =>
-                            doc.id != user.uid &&
-                            !_hiddenUserIds.contains(doc.id))
+                        .where(
+                          (doc) =>
+                              doc.id != user.uid &&
+                              !_hiddenUserIds.contains(doc.id),
+                        )
                         .toList();
 
                     if (users.isEmpty) {
@@ -953,13 +865,7 @@ class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
 
                         return Card(
                           child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: const Color(0xFF45233F),
-                              child: Text(
-                                dilseAvatarEmoji(data['avatarId'] as String?),
-                                style: const TextStyle(fontSize: 27),
-                              ),
-                            ),
+                            leading: dilseAvatar(data['avatarId'] as String?),
                             title: Text(name),
                             subtitle: Text(bio.isEmpty ? 'DilSe member' : bio),
                             trailing: const Icon(Icons.chevron_right),
