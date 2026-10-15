@@ -1,3 +1,8 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
+
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -962,197 +967,223 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
                                         data?['displayName'] as String? ??
                                         'DilSe member';
                                     final bio = data?['bio'] as String? ?? '';
-                                    final online = data?['isOnline'] == true;
 
-                                    if (_filter == 1 && !online) {
-                                      return const SizedBox.shrink();
-                                    }
                                     if (!name.toLowerCase().contains(
                                       _search.text.trim().toLowerCase(),
                                     )) {
                                       return const SizedBox.shrink();
                                     }
 
-                                    return Container(
-                                      margin: const EdgeInsets.only(bottom: 12),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF261A43),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: const Color(0xFF7556D9)
-                                              .withValues(alpha: 0.55),
-                                        ),
-                                      ),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(12),
-                                        child: Row(
-                                          children: [
-                                            Stack(
+                                    return StreamBuilder<DatabaseEvent>(
+                                      stream: FirebaseDatabase.instanceFor(
+                                        app: Firebase.app(),
+                                        databaseURL: 'https://dilse-b7bd8-default-rtdb.asia-southeast1.firebasedatabase.app',
+                                      ).ref('status/${row.key}').onValue,
+                                      builder: (context, presenceSnapshot) {
+                                        final presenceValue = presenceSnapshot
+                                            .data
+                                            ?.snapshot
+                                            .value;
+                                        final presence = presenceValue is Map
+                                            ? presenceValue
+                                            : null;
+                                        final online =
+                                            presence?['state'] == 'online';
+
+                                        if (_filter == 1 && !online) {
+                                          return const SizedBox.shrink();
+                                        }
+
+                                        return Container(
+                                          margin: const EdgeInsets.only(
+                                            bottom: 12,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF261A43),
+                                            borderRadius: BorderRadius.circular(
+                                              20,
+                                            ),
+                                            border: Border.all(
+                                              color: const Color(0xFF7556D9)
+                                                  .withValues(alpha: 0.55),
+                                            ),
+                                          ),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: Row(
                                               children: [
-                                                dilseAvatar(
-                                                  data?['avatarId'] as String?,
-                                                  radius: 27,
-                                                ),
-                                                if (online)
-                                                  Positioned(
-                                                    right: 0,
-                                                    bottom: 0,
-                                                    child: Container(
-                                                      width: 13,
-                                                      height: 13,
-                                                      decoration: BoxDecoration(
-                                                        color: const Color(
-                                                          0xFF39D98A,
-                                                        ),
-                                                        shape: BoxShape.circle,
-                                                        border: Border.all(
-                                                          color: const Color(
-                                                            0xFF261A43,
+                                                Stack(
+                                                  children: [
+                                                    dilseAvatar(
+                                                      data?['avatarId']
+                                                          as String?,
+                                                      radius: 27,
+                                                    ),
+                                                    if (online)
+                                                      Positioned(
+                                                        right: 0,
+                                                        bottom: 0,
+                                                        child: Container(
+                                                          width: 13,
+                                                          height: 13,
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(
+                                                              0xFF39D98A,
+                                                            ),
+                                                            shape:
+                                                                BoxShape.circle,
+                                                            border: Border.all(
+                                                              color:
+                                                                  const Color(
+                                                                    0xFF261A43,
+                                                                  ),
+                                                              width: 2,
+                                                            ),
                                                           ),
-                                                          width: 2,
                                                         ),
                                                       ),
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                            const SizedBox(width: 12),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    name,
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: 16,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    bio.isEmpty
-                                                        ? (online
-                                                              ? 'Online'
-                                                              : 'DilSe friend')
-                                                        : bio,
-                                                    maxLines: 2,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: TextStyle(
-                                                      color: online
-                                                          ? const Color(
-                                                              0xFF67E8A5,
-                                                            )
-                                                          : Colors.white60,
-                                                      fontSize: 12,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            IconButton(
-                                              tooltip: 'Unfriend',
-                                              icon: const Icon(
-                                                Icons.person_remove_alt_1,
-                                                color: Color(0xFFFF6B8A),
-                                              ),
-                                              onPressed: () async {
-                                                final ok = await showDialog<bool>(
-                                                  context: context,
-                                                  builder: (c) => AlertDialog(
-                                                    title: const Text(
-                                                      'Unfriend?',
-                                                    ),
-                                                    content: Text(
-                                                      'Kya $name ko friends list se hatana hai?',
-                                                    ),
-                                                    actions: [
-                                                      TextButton(
-                                                        onPressed: () =>
-                                                            Navigator.pop(
-                                                              c,
-                                                              false,
-                                                            ),
-                                                        child: const Text(
-                                                          'Cancel',
+                                                  ],
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      Text(
+                                                        name,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 16,
                                                         ),
                                                       ),
-                                                      FilledButton(
-                                                        onPressed: () =>
-                                                            Navigator.pop(
-                                                              c,
-                                                              true,
-                                                            ),
-                                                        child: const Text(
-                                                          'Unfriend',
+                                                      const SizedBox(height: 4),
+                                                      Text(
+                                                        bio.isEmpty
+                                                            ? (online
+                                                                  ? 'Online'
+                                                                  : 'DilSe friend')
+                                                            : bio,
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: TextStyle(
+                                                          color: online
+                                                              ? const Color(
+                                                                  0xFF67E8A5,
+                                                                )
+                                                              : Colors.white60,
+                                                          fontSize: 12,
                                                         ),
                                                       ),
                                                     ],
                                                   ),
-                                                );
-                                                if (ok != true ||
-                                                    !context.mounted) {
-                                                  return;
-                                                }
-                                                try {
-                                                  final batch = db.batch();
-                                                  for (final requestId in [
-                                                    '${me.uid}_${row.key}',
-                                                    '${row.key}_${me.uid}',
-                                                  ]) {
-                                                    final ref = db
-                                                        .collection(
-                                                          'friendRequests',
-                                                        )
-                                                        .doc(requestId);
-                                                    final request = await ref
-                                                        .get();
-                                                    if (request.exists &&
-                                                        request.data()?['status'] ==
-                                                            'accepted') {
-                                                      batch.update(ref, {
-                                                        'status': 'ended',
-                                                        'updatedAt':
-                                                            FieldValue.serverTimestamp(),
-                                                      });
+                                                ),
+                                                IconButton(
+                                                  tooltip: 'Unfriend',
+                                                  icon: const Icon(
+                                                    Icons.person_remove_alt_1,
+                                                    color: Color(0xFFFF6B8A),
+                                                  ),
+                                                  onPressed: () async {
+                                                    final ok = await showDialog<bool>(
+                                                      context: context,
+                                                      builder: (c) => AlertDialog(
+                                                        title: const Text(
+                                                          'Unfriend?',
+                                                        ),
+                                                        content: Text(
+                                                          'Kya $name ko friends list se hatana hai?',
+                                                        ),
+                                                        actions: [
+                                                          TextButton(
+                                                            onPressed: () =>
+                                                                Navigator.pop(
+                                                                  c,
+                                                                  false,
+                                                                ),
+                                                            child: const Text(
+                                                              'Cancel',
+                                                            ),
+                                                          ),
+                                                          FilledButton(
+                                                            onPressed: () =>
+                                                                Navigator.pop(
+                                                                  c,
+                                                                  true,
+                                                                ),
+                                                            child: const Text(
+                                                              'Unfriend',
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    );
+                                                    if (ok != true ||
+                                                        !context.mounted) {
+                                                      return;
                                                     }
-                                                  }
-                                                  await batch.commit();
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(
-                                                      context,
-                                                    ).showSnackBar(
-                                                      const SnackBar(
-                                                        content: Text(
-                                                          'Friend list se hata diya.',
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-                                                } catch (e) {
-                                                  if (context.mounted) {
-                                                    ScaffoldMessenger.of(
-                                                      context,
-                                                    ).showSnackBar(
-                                                      SnackBar(
-                                                        content: Text(
-                                                          'Unfriend fail: $e',
-                                                        ),
-                                                      ),
-                                                    );
-                                                  }
-                                                }
-                                              },
+                                                    try {
+                                                      final batch = db.batch();
+                                                      for (final requestId in [
+                                                        '${me.uid}_${row.key}',
+                                                        '${row.key}_${me.uid}',
+                                                      ]) {
+                                                        final ref = db
+                                                            .collection(
+                                                              'friendRequests',
+                                                            )
+                                                            .doc(requestId);
+                                                        final request =
+                                                            await ref.get();
+                                                        if (request.exists &&
+                                                            request.data()?['status'] ==
+                                                                'accepted') {
+                                                          batch.update(ref, {
+                                                            'status': 'ended',
+                                                            'updatedAt':
+                                                                FieldValue.serverTimestamp(),
+                                                          });
+                                                        }
+                                                      }
+                                                      await batch.commit();
+                                                      if (context.mounted) {
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          const SnackBar(
+                                                            content: Text(
+                                                              'Friend list se hata diya.',
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }
+                                                    } catch (e) {
+                                                      if (context.mounted) {
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(
+                                                              'Unfriend fail: $e',
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }
+                                                    }
+                                                  },
+                                                ),
+                                              ],
                                             ),
-                                          ],
-                                        ),
-                                      ),
+                                          ),
+                                        );
+                                      },
                                     );
                                   },
                                 );
@@ -1949,6 +1980,37 @@ class DirectChatPage extends StatefulWidget {
 class _DirectChatPageState extends State<DirectChatPage> {
   final _input = TextEditingController();
   bool _sending = false;
+  Timer? _typingTimer;
+  bool _typing = false;
+
+  // DilSe chat typing indicator: status Firestore mein real-time sync hota hai.
+  Future<void> _setTyping(bool value) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !user.emailVerified) return;
+    try {
+      await FirebaseFirestore.instance.collection('chats').doc(_chatId).set({
+        'typing.${user.uid}': value,
+      }, SetOptions(merge: true));
+    } catch (_) {}
+  }
+
+  void _onTypingChanged(String value) {
+    final hasText = value.trim().isNotEmpty;
+    if (hasText && !_typing) {
+      _typing = true;
+      _setTyping(true);
+    } else if (!hasText && _typing) {
+      _typing = false;
+      _setTyping(false);
+    }
+    _typingTimer?.cancel();
+    if (hasText) {
+      _typingTimer = Timer(const Duration(seconds: 2), () {
+        _typing = false;
+        _setTyping(false);
+      });
+    }
+  }
 
   String get _chatId {
     final ids = [FirebaseAuth.instance.currentUser!.uid, widget.otherUserId]
@@ -1968,16 +2030,34 @@ class _DirectChatPageState extends State<DirectChatPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || !user.emailVerified) return;
     try {
-      await FirebaseFirestore.instance.collection('chats').doc(_chatId).update({
-        'unreadCounts.${user.uid}': 0,
-      });
+      final chat = FirebaseFirestore.instance.collection('chats').doc(_chatId);
+      await chat.set({'unreadCounts.${user.uid}': 0}, SetOptions(merge: true));
+
+      // Actual per-message read receipt: current user is added to readBy.
+      final incoming = await chat
+          .collection('messages')
+          .where('senderId', isNotEqualTo: user.uid)
+          .get();
+      final batch = FirebaseFirestore.instance.batch();
+      for (final message in incoming.docs) {
+        final data = message.data();
+        final readBy = List<String>.from(data['readBy'] ?? const []);
+        if (!readBy.contains(user.uid)) {
+          batch.set(message.reference, {
+            'readBy': FieldValue.arrayUnion([user.uid]),
+          }, SetOptions(merge: true));
+        }
+      }
+      if (incoming.docs.isNotEmpty) await batch.commit();
     } catch (_) {
-      // Chat doc ya unread count abhi na ho to ignore karein.
+      // Rules ya unavailable chat par UI ko crash nahi karna.
     }
   }
 
   @override
   void dispose() {
+    _typingTimer?.cancel();
+    if (_typing) _setTyping(false);
     _input.dispose();
     super.dispose();
   }
@@ -1990,6 +2070,9 @@ class _DirectChatPageState extends State<DirectChatPage> {
 
     setState(() => _sending = true);
     _input.clear();
+    _typingTimer?.cancel();
+    _typing = false;
+    _setTyping(false);
     try {
       final db = FirebaseFirestore.instance;
       final chat = db.collection('chats').doc(_chatId);
@@ -2059,6 +2142,7 @@ class _DirectChatPageState extends State<DirectChatPage> {
           'senderId': user.uid,
           'text': text,
           'createdAt': FieldValue.serverTimestamp(),
+          'readBy': [user.uid],
         });
       });
 
@@ -2124,6 +2208,33 @@ class _DirectChatPageState extends State<DirectChatPage> {
       ),
       body: Column(
         children: [
+          // Live typing state from the other participant's chat document.
+          StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('chats')
+                .doc(_chatId)
+                .snapshots(),
+            builder: (context, chatSnap) {
+              final data = chatSnap.data?.data();
+              final typing = data?['typing'];
+              final otherTyping =
+                  typing is Map && typing[widget.otherUserId] == true;
+              if (!otherTyping) return const SizedBox.shrink();
+              return const Padding(
+                padding: EdgeInsets.fromLTRB(16, 8, 16, 2),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'typing…',
+                    style: TextStyle(
+                      color: Color(0xFFFF3D9A),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: ref.snapshots(),
@@ -2149,25 +2260,96 @@ class _DirectChatPageState extends State<DirectChatPage> {
                   itemBuilder: (context, i) {
                     final d = docs[i].data();
                     final mine = d['senderId'] == user.uid;
+                    final readBy = List<String>.from(d['readBy'] ?? const []);
+                    final isRead = readBy.contains(widget.otherUserId);
+                    final createdAt = d['createdAt'];
+                    final time = createdAt is Timestamp
+                        ? TimeOfDay.fromDateTime(createdAt.toDate())
+                              .format(context)
+                        : '';
                     return Align(
                       alignment: mine
                           ? Alignment.centerRight
                           : Alignment.centerLeft,
                       child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.all(12),
+                        margin: const EdgeInsets.symmetric(vertical: 5),
+                        padding: const EdgeInsets.fromLTRB(14, 10, 12, 7),
                         constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(context).size.width * .78,
+                          maxWidth: MediaQuery.of(context).size.width * .80,
                         ),
                         decoration: BoxDecoration(
-                          color: mine
-                              ? const Color(0xFF7556D9)
-                              : const Color(0xFF25283A),
-                          borderRadius: BorderRadius.circular(14),
+                          gradient: mine
+                              ? const LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    Color(0xFFE94E91),
+                                    Color(0xFF7556D9),
+                                  ],
+                                )
+                              : null,
+                          color: mine ? null : const Color(0xFF1B2035),
+                          border: Border.all(
+                            color: mine
+                                ? const Color(0x55FFB6DC)
+                                : const Color(0xFF303650),
+                          ),
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(18),
+                            topRight: const Radius.circular(18),
+                            bottomLeft: Radius.circular(mine ? 18 : 5),
+                            bottomRight: Radius.circular(mine ? 5 : 18),
+                          ),
+                          boxShadow: mine
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFFE94E91)
+                                        .withValues(alpha: .15),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ]
+                              : null,
                         ),
-                        child: Text(
-                          d['text'] as String? ?? '',
-                          style: TextStyle(color: Colors.white, height: 1.35),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                d['text'] as String? ?? '',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  height: 1.4,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  time,
+                                  style: const TextStyle(
+                                    color: Color(0xCCFFFFFF),
+                                    fontSize: 10,
+                                  ),
+                                ),
+                                if (mine) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    isRead ? Icons.done_all : Icons.done,
+                                    size: 14,
+                                    color: isRead
+                                        ? const Color(0xFFB7F7FF)
+                                        : const Color(0xCCFFFFFF),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -2186,17 +2368,52 @@ class _DirectChatPageState extends State<DirectChatPage> {
                       controller: _input,
                       maxLength: 4000,
                       maxLines: 3,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: 'Message...',
                         counterText: '',
-                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: const Color(0xFF15182B),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 14,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(26),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF343852),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(26),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF343852),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(26),
+                          borderSide: const BorderSide(
+                            color: Color(0xFFE94E91),
+                            width: 1.5,
+                          ),
+                        ),
                       ),
+                      onChanged: _onTypingChanged,
                       onSubmitted: (_) => _send(),
                     ),
                   ),
-                  IconButton(
-                    onPressed: _sending ? null : _send,
-                    icon: const Icon(Icons.send),
+                  const SizedBox(width: 6),
+                  Container(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Color(0xFFE94E91), Color(0xFF7556D9)],
+                      ),
+                    ),
+                    child: IconButton(
+                      onPressed: _sending ? null : _send,
+                      color: Colors.white,
+                      icon: const Icon(Icons.send_rounded),
+                    ),
                   ),
                 ],
               ),
@@ -2231,13 +2448,17 @@ class FirestoreChatsPage extends StatelessWidget {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        if (snap.data!.docs.isEmpty) {
+        final visibleChats = snap.data!.docs.where((doc) {
+          final hiddenBy = doc.data()['hiddenBy'];
+          return !(hiddenBy is Map && hiddenBy[user.uid] == true);
+        }).toList();
+        if (visibleChats.isEmpty) {
           return const Center(
             child: Text('Abhi chats nahi hain. Discover se message karo 💌'),
           );
         }
         return ListView(
-          children: snap.data!.docs.map((doc) {
+          children: visibleChats.map((doc) {
             final data = doc.data();
             final ids = List<String>.from(data['participants'] ?? []);
             final other = ids.where((id) => id != user.uid).firstOrNull;
@@ -2261,8 +2482,11 @@ class FirestoreChatsPage extends StatelessWidget {
                   ),
                   title: Text(name),
                   subtitle: Text(data['lastMessage'] as String? ?? ''),
-                  trailing: unread > 0
-                      ? Container(
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (unread > 0)
+                        Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 9,
                             vertical: 5,
@@ -2278,8 +2502,40 @@ class FirestoreChatsPage extends StatelessWidget {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                        )
-                      : null,
+                        ),
+                      if (unread > 0) const SizedBox(width: 4),
+                      PopupMenuButton<String>(
+                        tooltip: 'Chat options',
+                        onSelected: (value) async {
+                          if (value != 'hide') return;
+                          try {
+                            await doc.reference.update({
+                              'hiddenBy.${user.uid}': true,
+                            });
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Chat hidden')),
+                              );
+                            }
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Chat hide nahi ho payi.'),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(
+                            value: 'hide',
+                            child: Text('Hide chat'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(

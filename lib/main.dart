@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth_gate.dart';
 import 'real_social_pages.dart';
@@ -91,7 +92,267 @@ class DilSeApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const AuthGate(),
+      home: const DilSeLaunchFlow(),
+    );
+  }
+}
+
+class DilSeLaunchFlow extends StatefulWidget {
+  const DilSeLaunchFlow({super.key});
+
+  @override
+  State<DilSeLaunchFlow> createState() => _DilSeLaunchFlowState();
+}
+
+class _DilSeLaunchFlowState extends State<DilSeLaunchFlow> {
+  bool _ready = false;
+  bool _showIntro = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _prepare();
+  }
+
+  Future<void> _prepare() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool('dilse_onboarding_seen') ?? false;
+    await Future<void>.delayed(const Duration(milliseconds: 1400));
+    if (!mounted) return;
+    setState(() {
+      _showIntro = !seen;
+      _ready = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) {
+      return Scaffold(
+        backgroundColor: bg,
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: RadialGradient(
+              center: Alignment(0, -0.2),
+              radius: 0.9,
+              colors: [Color(0x664F247D), bg],
+            ),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 112,
+                  height: 112,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(colors: [pink, purple]),
+                    boxShadow: [
+                      BoxShadow(
+                        color: pink.withValues(alpha: 0.35),
+                        blurRadius: 34,
+                        spreadRadius: 5,
+                      ),
+                      BoxShadow(
+                        color: purple.withValues(alpha: 0.25),
+                        blurRadius: 45,
+                        spreadRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.favorite_rounded,
+                    size: 62,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                const Text(
+                  'DilSe',
+                  style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Dosti Jo Dil Tak Jaaye ❤️',
+                  style: TextStyle(color: Colors.white70, fontSize: 15),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return _showIntro ? const DilSeOnboarding() : const AuthGate();
+  }
+}
+
+class DilSeOnboarding extends StatefulWidget {
+  const DilSeOnboarding({super.key});
+
+  @override
+  State<DilSeOnboarding> createState() => _DilSeOnboardingState();
+}
+
+class _DilSeOnboardingState extends State<DilSeOnboarding> {
+  final PageController _pages = PageController();
+  int _index = 0;
+
+  static const _items = [
+    (
+      Icons.favorite_rounded,
+      'Dosti jo dil tak jaaye',
+      'Apne jaise logon se milo aur naye connections banao.',
+    ),
+    (
+      Icons.chat_bubble_rounded,
+      'Dil khol kar baat karo',
+      'Private chats mein baatein karo aur apni dosti badhao.',
+    ),
+    (
+      Icons.graphic_eq_rounded,
+      'Saath mein raho',
+      'Voice rooms join karo aur community ka hissa bano.',
+    ),
+  ];
+
+  Future<void> _finish() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('dilse_onboarding_seen', true);
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => const AuthGate()),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: bg,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(onPressed: _finish, child: const Text('Skip')),
+            ),
+            Expanded(
+              child: PageView.builder(
+                controller: _pages,
+                itemCount: _items.length,
+                onPageChanged: (v) => setState(() => _index = v),
+                itemBuilder: (context, i) {
+                  final item = _items[i];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 30),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 174,
+                          height: 174,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [pink, purple],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: purple.withValues(alpha: 0.28),
+                                blurRadius: 38,
+                                spreadRadius: 4,
+                              ),
+                            ],
+                          ),
+                          child: Icon(item.$1, size: 82, color: Colors.white),
+                        ),
+                        const SizedBox(height: 38),
+                        Text(
+                          item.$2,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 27,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          item.$3,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            height: 1.5,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                _items.length,
+                (i) => AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  width: _index == i ? 24 : 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: _index == i ? pink : Colors.white24,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+              child: SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [pink, purple]),
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                    ),
+                    onPressed: () {
+                      if (_index == _items.length - 1) {
+                        _finish();
+                      } else {
+                        _pages.nextPage(
+                          duration: const Duration(milliseconds: 280),
+                          curve: Curves.easeOut,
+                        );
+                      }
+                    },
+                    child: Text(
+                      _index == _items.length - 1 ? 'Get Started' : 'Continue',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
