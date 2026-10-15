@@ -14,6 +14,14 @@ service cloud.firestore {
             .data.participants;
     }
 
+
+    function notBlocked(chatId) {
+      let participants = get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+      let other = participants[0] == request.auth.uid ? participants[1] : participants[0];
+      return !exists(/databases/$(database)/documents/blocks/$(request.auth.uid + '_' + other))
+        && !exists(/databases/$(database)/documents/blocks/$(other + '_' + request.auth.uid));
+    }
+
     function hasActiveSubscription(uid) {
       let path = /databases/$(database)/documents/subscriptions/$(uid);
       return exists(path)
@@ -57,6 +65,7 @@ service cloud.firestore {
         allow read: if chatMember(chatId);
 
         allow create: if chatMember(chatId)
+          && notBlocked(chatId)
           && request.resource.data.senderId == request.auth.uid
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0
@@ -116,6 +125,23 @@ service cloud.firestore {
     match /subscriptions/{userId} {
       allow read: if verifiedUser() && request.auth.uid == userId;
       allow write: if false;
+    }
+
+    match /blocks/{blockId} {
+      allow read: if verifiedUser()
+        && (resource.data.blockerId == request.auth.uid
+            || resource.data.blockedUserId == request.auth.uid);
+
+      allow create: if verifiedUser()
+        && request.resource.data.blockerId == request.auth.uid
+        && request.resource.data.blockedUserId is string
+        && request.resource.data.blockedUserId != request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'blockerId', 'blockedUserId', 'createdAt'
+        ])
+        && blockId == request.auth.uid + '_' + request.resource.data.blockedUserId;
+
+      allow update, delete: if false;
     }
 
     match /reports/{reportId} {

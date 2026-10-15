@@ -523,6 +523,60 @@ class PublicUserProfilePage extends StatelessWidget {
                   ),
           ),
           OutlinedButton.icon(
+            icon: const Icon(Icons.block),
+            label: const Text('Block User'),
+            onPressed: me == null || !me.emailVerified || me.uid == userId
+                ? null
+                : () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        title: const Text('Block this user?'),
+                        content: const Text(
+                          'Block karne ke baad aap dono ek dusre ko message nahi bhej paayenge.',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(c, false),
+                            child: const Text('Cancel'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(c, true),
+                            child: const Text('Block'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm != true || !context.mounted) return;
+                    try {
+                      await FirebaseFirestore.instance
+                          .collection('blocks')
+                          .doc('${me.uid}_$userId')
+                          .set({
+                            'blockerId': me.uid,
+                            'blockedUserId': userId,
+                            'createdAt': FieldValue.serverTimestamp(),
+                          });
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('User blocked')),
+                        );
+                        Navigator.pop(context);
+                      }
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Block failed. Firestore rules publish karein.',
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
+          ),
+          OutlinedButton.icon(
             icon: const Icon(Icons.flag_outlined),
             label: const Text('Report profile'),
             onPressed: me == null || !me.emailVerified || me.uid == userId
@@ -645,6 +699,18 @@ class _DirectChatPageState extends State<DirectChatPage> {
       final message = chat.collection('messages').doc();
       final participants = [user.uid, widget.otherUserId]..sort();
 
+      final outgoingBlock = await db
+          .collection('blocks')
+          .doc('${user.uid}_${widget.otherUserId}')
+          .get();
+      final incomingBlock = await db
+          .collection('blocks')
+          .doc('${widget.otherUserId}_${user.uid}')
+          .get();
+      if (outgoingBlock.exists || incomingBlock.exists) {
+        throw StateError('USER_BLOCKED');
+      }
+
       // Ensure the chat exists before the atomic message transaction.
       await chat.set({
         'participants': participants,
@@ -703,11 +769,14 @@ class _DirectChatPageState extends State<DirectChatPage> {
       _input.text = text;
       if (mounted) {
         final limitReached = e.toString().contains('FREE_CHAT_LIMIT');
+        final userBlocked = e.toString().contains('USER_BLOCKED');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
               limitReached
                   ? '10 free messages complete. Chat ke liye ₹99 / 30-day Pass chahiye.'
+                  : userBlocked
+                  ? 'Message nahi bhej sakte: aap mein se kisi ne doosre ko block kiya hai.'
                   : 'Message send nahi hua. Firestore rules aur connection check karein.',
             ),
           ),
@@ -779,10 +848,7 @@ class _DirectChatPageState extends State<DirectChatPage> {
                         ),
                         child: Text(
                           d['text'] as String? ?? '',
-                          style: TextStyle(
-                            color: Colors.white,
-                            height: 1.35,
-                          ),
+                          style: TextStyle(color: Colors.white, height: 1.35),
                         ),
                       ),
                     );
