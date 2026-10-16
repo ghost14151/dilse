@@ -2115,11 +2115,8 @@ class _DirectChatPageState extends State<DirectChatPage> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Edit failed: $e'),
-          ),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Edit failed: $e')));
       }
     }
   }
@@ -2150,11 +2147,8 @@ class _DirectChatPageState extends State<DirectChatPage> {
       await ref.delete();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Delete failed: $e'),
-          ),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
       }
     }
   }
@@ -2281,17 +2275,47 @@ class _DirectChatPageState extends State<DirectChatPage> {
       if (mounted) {
         final limitReached = e.toString().contains('FREE_CHAT_LIMIT');
         final userBlocked = e.toString().contains('USER_BLOCKED');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              limitReached
-                  ? '10 free messages complete. Chat ke liye DilSe Premium plan chahiye.'
-                  : userBlocked
-                  ? 'Message nahi bhej sakte: aap mein se kisi ne doosre ko block kiya hai.'
-                  : 'Message send nahi hua. Firestore rules aur connection check karein.',
+
+        if (limitReached) {
+          await showDialog<void>(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text('Free messages complete ❤️'),
+              content: const Text(
+                'Aapke 10 free messages poore ho gaye. '
+                'Unlimited chat ke liye DilSe Premium Pass chunein.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Baad mein'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PremiumPlansPage(),
+                      ),
+                    );
+                  },
+                  child: const Text('Get Premium Pass 👑'),
+                ),
+              ],
             ),
-          ),
-        );
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                userBlocked
+                    ? 'Message nahi bhej sakte: aap mein se kisi ne doosre ko block kiya hai.'
+                    : 'Message send nahi hua. Firestore rules aur connection check karein.',
+              ),
+            ),
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _sending = false);
