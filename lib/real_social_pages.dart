@@ -1988,9 +1988,13 @@ class _DirectChatPageState extends State<DirectChatPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || !user.emailVerified) return;
     try {
-      await FirebaseFirestore.instance.collection('chats').doc(_chatId).set({
-        'typing.${user.uid}': value,
-      }, SetOptions(merge: true));
+      final chat = FirebaseFirestore.instance.collection('chats').doc(_chatId);
+      final snapshot = await chat.get();
+      if (!snapshot.exists) return;
+      final data = snapshot.data();
+      final participants = data?['participants'];
+      if (participants is! List || !participants.contains(user.uid)) return;
+      await chat.update({'typing.${user.uid}': value});
     } catch (_) {}
   }
 
@@ -2031,7 +2035,11 @@ class _DirectChatPageState extends State<DirectChatPage> {
     if (user == null || !user.emailVerified) return;
     try {
       final chat = FirebaseFirestore.instance.collection('chats').doc(_chatId);
-      await chat.set({'unreadCounts.${user.uid}': 0}, SetOptions(merge: true));
+      final chatSnapshot = await chat.get();
+      if (!chatSnapshot.exists) return;
+      final participants = chatSnapshot.data()?['participants'];
+      if (participants is! List || !participants.contains(user.uid)) return;
+      await chat.update({'unreadCounts.${user.uid}': 0});
 
       // Actual per-message read receipt: current user is added to readBy.
       final incoming = await chat
