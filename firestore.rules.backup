@@ -30,9 +30,39 @@ service cloud.firestore {
         && get(path).data.expiresAt > request.time;
     }
 
+    function isAdmin() {
+      return verifiedUser()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function hasFreeChatAccess(uid) {
+      let path = /databases/$(database)/documents/freeChatAccess/$(uid);
+      return exists(path) && get(path).data.active == true;
+    }
+
     function matchingUsageMessage() {
       let path = /databases/$(database)/documents/chats/$(request.resource.data.lastChatId)/messages/$(request.resource.data.lastMessageId);
       return getAfter(path).data.senderId == request.auth.uid;
+    }
+
+    match /admins/{adminId} {
+      allow read: if verifiedUser() && request.auth.uid == adminId;
+      allow write: if false;
+    }
+
+    match /freeChatAccess/{userId} {
+      allow read: if verifiedUser()
+        && (request.auth.uid == userId || isAdmin());
+
+      allow create, update: if isAdmin()
+        && request.resource.data.keys().hasOnly([
+          'active', 'grantedBy', 'updatedAt'
+        ])
+        && request.resource.data.active is bool
+        && request.resource.data.grantedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
     }
 
     match /users/{userId} {
@@ -74,7 +104,7 @@ service cloud.firestore {
             'senderId', 'text', 'createdAt'
           ])
           && (
-            hasActiveSubscription(request.auth.uid)
+            (hasActiveSubscription(request.auth.uid) || hasFreeChatAccess(request.auth.uid))
             || (
               getAfter(/databases/$(database)/documents/chatUsage/$(request.auth.uid)).data.messagesSent <= 10
               && getAfter(/databases/$(database)/documents/chatUsage/$(request.auth.uid)).data.lastChatId == chatId
@@ -174,6 +204,12 @@ service cloud.firestore {
             && request.resource.data.status == 'pending'
             && request.resource.data.createdAt == request.time
             && request.resource.data.updatedAt == request.time)
+          ||
+          (request.auth.uid in [resource.data.senderId, resource.data.receiverId]
+            && resource.data.status == 'accepted'
+            && request.resource.data.status == 'ended'
+            && request.resource.data.createdAt == resource.data.createdAt
+            && request.resource.data.updatedAt == request.time)
         );
 
       allow delete: if false;
@@ -195,7 +231,9 @@ service cloud.firestore {
         ])
         && blockId == request.auth.uid + '_' + request.resource.data.blockedUserId;
 
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if verifiedUser()
+        && resource.data.blockerId == request.auth.uid;
     }
 
     match /reports/{reportId} {
@@ -203,7 +241,8 @@ service cloud.firestore {
         && request.resource.data.reporterId == request.auth.uid
         && request.resource.data.targetUserId is string
         && request.resource.data.reason is string;
-      allow read, update, delete: if false;
+      allow read: if isAdmin();
+      allow update, delete: if false;
     }
   }
 }

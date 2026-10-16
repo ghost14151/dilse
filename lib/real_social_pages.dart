@@ -2113,11 +2113,11 @@ class _DirectChatPageState extends State<DirectChatPage> {
         'text': replacement,
         'editedAt': FieldValue.serverTimestamp(),
       });
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Message edit nahi hua. Rules check karein.'),
+          SnackBar(
+            content: Text('Edit failed: $e'),
           ),
         );
       }
@@ -2148,11 +2148,11 @@ class _DirectChatPageState extends State<DirectChatPage> {
 
     try {
       await ref.delete();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Message delete nahi hua. Rules check karein.'),
+          SnackBar(
+            content: Text('Delete failed: $e'),
           ),
         );
       }
