@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'config/agora_config.dart';
+import 'voice_room_page.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -978,70 +980,238 @@ class ChatsPage extends StatelessWidget {
 class RoomsPage extends StatelessWidget {
   const RoomsPage({super.key});
 
+  static const _rooms = [
+    ('Music & Masti', 'Songs, games aur fun conversations',
+      '12 online', Icons.music_note_rounded, Color(0xFFFF4F9A)),
+    ('New Friends Club', 'Naye logon se milo aur baat karo',
+      '8 online', Icons.groups_rounded, Color(0xFF9667FF)),
+    ('Late Night Talks', 'Relax karo, apni baat share karo',
+      '5 online', Icons.nightlight_round, Color(0xFF4F8DFF)),
+    ('Dil Ki Baatein', 'Positive vibes aur friendly chats',
+      '3 online', Icons.favorite_rounded, Color(0xFFFF8066)),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(18, 20, 18, 28),
       children: [
         const PageHeading(
-          title: 'Live Voice Rooms 🎙️',
+          title: 'Voice Rooms 🎙️',
           subtitle: 'Suno, bolo aur naye dost banao',
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 22),
         Container(
           padding: const EdgeInsets.all(22),
           decoration: BoxDecoration(
             gradient: const LinearGradient(
-              colors: [Color(0xFF7556D9), Color(0xFFE94E91)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF7547E8), Color(0xFFE94398), Color(0xFFFF8B9D)],
             ),
-            borderRadius: BorderRadius.circular(22),
+            borderRadius: BorderRadius.circular(26),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFE94398).withValues(alpha: 0.22),
+                blurRadius: 22,
+                offset: const Offset(0, 9),
+              ),
+            ],
           ),
           child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.graphic_eq, color: Colors.white, size: 55),
-              SizedBox(height: 10),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 25,
+                    backgroundColor: Colors.white24,
+                    child: Icon(Icons.graphic_eq_rounded,
+                        color: Colors.white, size: 30),
+                  ),
+                  Spacer(),
+                  Icon(Icons.auto_awesome_rounded,
+                      color: Colors.white70, size: 24),
+                ],
+              ),
+              SizedBox(height: 20),
               Text(
                 'Your voice, your community',
-                textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 21,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
+              SizedBox(height: 7),
               Text(
-                'Apni pasand ke topics par baat karo',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70),
+                'Apne jaise logon se connect karo ✨',
+                style: TextStyle(color: Colors.white, fontSize: 13),
+              ),
+              SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(Icons.shield_outlined, color: Colors.white, size: 17),
+                  SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      'Respectful raho • Safe community',
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
         ),
-        const SizedBox(height: 22),
-        const RoomCard(
-          title: '🎵 Music & Masti',
-          subtitle: 'Songs aur fun conversations',
-          people: '12 people',
-          color: Color(0xFFFFE1EF),
+        const SizedBox(height: 26),
+        const Row(
+          children: [
+            Expanded(
+              child: Text('Explore Rooms',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            ),
+            Icon(Icons.headphones_rounded, color: Color(0xFFFF3D9A)),
+          ],
         ),
-        const RoomCard(
-          title: '🤝 New Friends Club',
-          subtitle: 'Naye logon se milo',
-          people: '8 people',
-          color: Color(0xFFE6DEFF),
-        ),
-        const RoomCard(
-          title: '🌙 Late Night Talks',
-          subtitle: 'Relaxed group chat',
-          people: '5 people',
-          color: Color(0xFFDCEBFF),
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 5),
         const Text(
-          'Voice rooms ka live audio feature abhi demo hai; audio service aur moderation connect karni hogi.',
-          style: TextStyle(color: Colors.white70, fontSize: 12),
+          'Apni vibe wala room choose karo',
+          style: TextStyle(color: Colors.white60, fontSize: 13),
+        ),
+        const SizedBox(height: 16),
+        ..._rooms.map((room) => _PremiumRoomCard(
+          title: room.$1,
+          subtitle: room.$2,
+          people: room.$3,
+          icon: room.$4,
+          accent: room.$5,
+        )),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, color: Color(0xFFFF8DBB), size: 19),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Abhi rooms ka audio demo hai. Live voice connection abhi setup hona baaki hai.',
+                  style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _PremiumRoomCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String people;
+  final IconData icon;
+  final Color accent;
+
+  const _PremiumRoomCard({
+    required this.title,
+    required this.subtitle,
+    required this.people,
+    required this.icon,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 13),
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFF21182D),
+        borderRadius: BorderRadius.circular(21),
+        border: Border.all(color: accent.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 53,
+            height: 53,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [accent, accent.withValues(alpha: 0.55)],
+              ),
+              borderRadius: BorderRadius.circular(17),
+            ),
+            child: Icon(icon, color: Colors.white, size: 27),
+          ),
+          const SizedBox(width: 13),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    )),
+                const SizedBox(height: 4),
+                Text(subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white70, fontSize: 11, height: 1.3,
+                    )),
+                const SizedBox(height: 9),
+                Row(
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(people,
+                        style: TextStyle(color: accent, fontSize: 11)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: accent,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(13),
+              ),
+            ),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => VoiceRoomPage(
+                    title: title,
+                    channelName: AgoraConfig.testChannel,
+                  ),
+                ),
+              );
+            },
+            child: const Text('Join'),
+          ),
+        ],
+      ),
     );
   }
 }
