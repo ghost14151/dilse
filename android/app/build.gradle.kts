@@ -7,7 +7,8 @@ plugins {
 
 android {
     namespace = "com.dilse.app.dilse"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
+
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
