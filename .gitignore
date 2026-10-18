@@ -50,3 +50,6 @@ app.*.map.json
 app-debug.apk
 
 node_modules/
+
+# Cloudflare Worker temporary files
+cloudflare-worker/.wrangler/
