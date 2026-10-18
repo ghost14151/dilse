@@ -110,7 +110,12 @@ class _VoiceRoomPageState extends State<VoiceRoomPage> {
       if (response.statusCode != 200) {
         final message =
             data['error']?.toString() ?? 'HTTP ${response.statusCode}';
-        throw Exception(message);
+        final detail = data['firebaseError']?.toString();
+        throw Exception(
+          detail != null && detail.isNotEmpty
+              ? '$message ($detail)'
+              : message,
+        );
       }
 
       final token = data['token']?.toString() ?? '';
