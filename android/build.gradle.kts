@@ -17,6 +17,16 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+
+    if (project.name == "agora_rtc_engine") {
+        project.afterEvaluate {
+            project.extensions.findByName("android")?.let { android ->
+                android.javaClass
+                    .getMethod("setCompileSdkVersion", Int::class.javaPrimitiveType)
+                    .invoke(android, 36)
+            }
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {
