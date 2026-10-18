@@ -17,8 +17,8 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
-
-    if (project.name == "agora_rtc_engine") {
+    if (project.name == "agora_rtc_engine" ||
+        project.name == "iris_method_channel") {
         project.afterEvaluate {
             project.extensions.findByName("android")?.let { android ->
                 android.javaClass
