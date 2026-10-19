@@ -66,6 +66,18 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
+      match /fcmTokens/{tokenId} {
+        allow read: if false;
+        allow create, update: if verifiedUser()
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['token', 'updatedAt'])
+          && request.resource.data.token is string
+          && request.resource.data.token.size() > 0
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if verifiedUser()
+          && request.auth.uid == userId;
+      }
+
       allow read: if verifiedUser();
       allow create, update: if verifiedUser()
         && request.auth.uid == userId
@@ -267,6 +279,31 @@ service cloud.firestore {
       allow update: if false;
       allow delete: if verifiedUser()
         && resource.data.blockerId == request.auth.uid;
+    }
+
+
+    match /dailyStreaks/{userId} {
+      allow read: if verifiedUser()
+        && request.auth.uid == userId;
+      allow create: if verifiedUser()
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.streak is int
+        && request.resource.data.streak >= 1
+        && request.resource.data.lastCheckInDate is string
+        && request.resource.data.keys().hasOnly([
+          'uid', 'streak', 'lastCheckInDate', 'updatedAt'
+        ]);
+      allow update: if verifiedUser()
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.streak is int
+        && request.resource.data.streak >= 1
+        && request.resource.data.lastCheckInDate is string
+        && request.resource.data.keys().hasOnly([
+          'uid', 'streak', 'lastCheckInDate', 'updatedAt'
+        ]);
+      allow delete: if false;
     }
 
     match /reports/{reportId} {

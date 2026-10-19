@@ -202,7 +202,7 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
               const SizedBox(height: 8),
               const Text(
                 'Apni pasand ka realistic avatar chuno ❤️',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
+                style: TextStyle(color: Color(0xFF6F687B), fontSize: 12),
               ),
               const SizedBox(height: 12),
               const Text(
@@ -221,7 +221,7 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
               const SizedBox(height: 8),
               const Text(
                 'Avatar choose karne ke baad Save Profile dabao.',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
+                style: TextStyle(color: Color(0xFF6F687B), fontSize: 12),
               ),
             ],
           ),
@@ -235,7 +235,7 @@ class _FirestoreProfilePageState extends State<FirestoreProfilePage> {
         Text(
           user?.email ?? '',
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white70, fontSize: 14),
+          style: const TextStyle(color: Color(0xFF6F687B), fontSize: 14),
         ),
         const SizedBox(height: 20),
         TextField(
@@ -547,7 +547,7 @@ class PremiumPlansPage extends StatelessWidget {
           const Text(
             'Premium plans ki details',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70),
+            style: TextStyle(color: Color(0xFF6F687B)),
           ),
           const SizedBox(height: 20),
           ...plans.map(
@@ -584,6 +584,242 @@ class PremiumPlansPage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class HiddenChatsManagerPage extends StatelessWidget {
+  const HiddenChatsManagerPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !user.emailVerified) {
+      return const Scaffold(
+        body: Center(child: Text('Verified login required')),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Hidden Chats')),
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('chats')
+            .where('participants', arrayContains: user.uid)
+            .snapshots(),
+        builder: (context, snap) {
+          if (snap.hasError) {
+            return const Center(child: Text('Chats load nahi ho paaye.'));
+          }
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final chats = snap.data!.docs;
+          if (chats.isEmpty) {
+            return const Center(child: Text('Abhi koi chat nahi hai.'));
+          }
+
+          return ListView(
+            children: chats.map((doc) {
+              final data = doc.data();
+              final ids = List<String>.from(data['participants'] ?? []);
+              final other = ids.where((id) => id != user.uid).firstOrNull;
+              if (other == null) return const SizedBox.shrink();
+
+              final hiddenBy = data['hiddenBy'];
+              final isHidden = hiddenBy is Map && hiddenBy[user.uid] == true;
+
+              return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                future: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(other)
+                    .get(),
+                builder: (context, profile) {
+                  final profileData = profile.data?.data();
+                  final name =
+                      profileData?['displayName'] as String? ?? 'DilSe User';
+
+                  return ListTile(
+                    leading: dilseAvatar(profileData?['avatarId'] as String?),
+                    title: Text(name),
+                    subtitle: Text(isHidden ? 'Hidden chat' : 'Visible chat'),
+                    trailing: TextButton(
+                      onPressed: () async {
+                        try {
+                          await doc.reference.update({
+                            'hiddenBy.${user.uid}': !isHidden,
+                          });
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  isHidden ? 'Chat restored' : 'Chat hidden',
+                                ),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Update failed: $e')),
+                            );
+                          }
+                        }
+                      },
+                      child: Text(isHidden ? 'Restore' : 'Hide'),
+                    ),
+                  );
+                },
+              );
+            }).toList(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class DailyStreakPage extends StatefulWidget {
+  const DailyStreakPage({super.key});
+
+  @override
+  State<DailyStreakPage> createState() => _DailyStreakPageState();
+}
+
+class _DailyStreakPageState extends State<DailyStreakPage> {
+  bool _busy = false;
+
+  String _dateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+
+  Future<void> _checkIn() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !user.emailVerified || _busy) return;
+
+    setState(() => _busy = true);
+    try {
+      final ref = FirebaseFirestore.instance
+          .collection('dailyStreaks')
+          .doc(user.uid);
+
+      await FirebaseFirestore.instance.runTransaction((tx) async {
+        final snapshot = await tx.get(ref);
+        final now = DateTime.now();
+        final today = _dateKey(now);
+
+        if (snapshot.exists && snapshot.data()?['lastCheckInDate'] == today) {
+          throw Exception('Aaj ka check-in pehle ho chuka hai.');
+        }
+
+        final old = snapshot.data() ?? <String, dynamic>{};
+        final last = old['lastCheckInDate'] as String?;
+        final oldCount = (old['streak'] as num?)?.toInt() ?? 0;
+        final yesterday = _dateKey(now.subtract(const Duration(days: 1)));
+        final nextCount = last == yesterday ? oldCount + 1 : 1;
+
+        tx.set(ref, {
+          'uid': user.uid,
+          'streak': nextCount,
+          'lastCheckInDate': today,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Daily check-in complete! 🔥')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        final message = e.toString().contains('pehle ho chuka')
+            ? 'Aaj ka check-in ho chuka hai ❤️'
+            : 'Check-in nahi hua: $e';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !user.emailVerified) {
+      return const Scaffold(
+        body: Center(child: Text('Verified login required')),
+      );
+    }
+
+    final ref = FirebaseFirestore.instance
+        .collection('dailyStreaks')
+        .doc(user.uid);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Daily DilSe Streak 🔥')),
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: ref.snapshots(),
+        builder: (context, snap) {
+          if (snap.hasError) {
+            return const Center(child: Text('Streak load nahi ho paayi.'));
+          }
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final data = snap.data!.data() ?? <String, dynamic>{};
+          final streak = (data['streak'] as num?)?.toInt() ?? 0;
+          final today = _dateKey(DateTime.now());
+          final checkedIn = data['lastCheckInDate'] == today;
+
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.local_fire_department,
+                    size: 88,
+                    color: _pink,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    '$streak day${streak == 1 ? '' : 's'}',
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    checkedIn
+                        ? 'Aaj ka check-in complete ❤️'
+                        : 'Roz check-in karo aur apni streak badhao!',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: checkedIn || _busy ? null : _checkIn,
+                    icon: Icon(checkedIn ? Icons.check : Icons.favorite),
+                    label: Text(
+                      _busy
+                          ? 'Please wait...'
+                          : checkedIn
+                          ? 'Checked in today'
+                          : 'Daily Check-in',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -649,6 +885,24 @@ class DilSeSettingsSection extends StatelessWidget {
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const FriendRequestsPage()),
+            ),
+          ),
+          option(
+            Icons.local_fire_department,
+            'Daily DilSe Streak',
+            'Daily check-in aur streak count',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const DailyStreakPage()),
+            ),
+          ),
+          option(
+            Icons.visibility_off_outlined,
+            'Hidden Chats',
+            'Hide or restore chats',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const HiddenChatsManagerPage()),
             ),
           ),
           option(
@@ -813,10 +1067,10 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
         .snapshots();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF160F2D),
+      backgroundColor: const Color(0xFFF8F7FC),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF21143F),
-        foregroundColor: Colors.white,
+        backgroundColor: const Color(0xFFFFFFFF),
+        foregroundColor: const Color(0xFF201A2C),
         elevation: 0,
         title: const Text(
           'My Friends 👥',
@@ -831,7 +1085,7 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
               padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFF49216F), Color(0xFF21143F)],
+                  colors: [Color(0xFFFBE4F1), Colors.white],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -845,7 +1099,7 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
                   const Text(
                     'Apni DilSe family 💕',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: Color(0xFF201A2C),
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
                     ),
@@ -853,22 +1107,22 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
                   const SizedBox(height: 6),
                   const Text(
                     'Apne doston se jude raho',
-                    style: TextStyle(color: Colors.white70),
+                    style: TextStyle(color: Color(0xFF6F687B)),
                   ),
                   const SizedBox(height: 18),
                   TextField(
                     controller: _search,
                     onChanged: (_) => setState(() {}),
-                    style: const TextStyle(color: Colors.white),
+                    style: const TextStyle(color: Color(0xFF201A2C)),
                     decoration: InputDecoration(
                       hintText: 'Friend ka naam search karo...',
-                      hintStyle: const TextStyle(color: Colors.white60),
+                      hintStyle: const TextStyle(color: Color(0xFF8C8599)),
                       prefixIcon: const Icon(
                         Icons.search,
                         color: Color(0xFFFF5AA5),
                       ),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.10),
+                      fillColor: const Color(0xFFF2EFF8),
                       contentPadding: const EdgeInsets.symmetric(vertical: 14),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -1078,7 +1332,7 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
                                                               ? const Color(
                                                                   0xFF67E8A5,
                                                                 )
-                                                              : Colors.white60,
+                                                              : Color(0xFF8C8599),
                                                           fontSize: 12,
                                                         ),
                                                       ),
@@ -1207,9 +1461,9 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
       selected: selected,
       onSelected: (_) => setState(() => _filter = value),
       selectedColor: const Color(0xFFFF3D9A),
-      backgroundColor: const Color(0xFF33224F),
+      backgroundColor: const Color(0xFFF2EFF8),
       labelStyle: TextStyle(
-        color: selected ? Colors.white : Colors.white70,
+        color: selected ? Colors.white : Color(0xFF6F687B),
         fontWeight: FontWeight.w600,
       ),
       side: BorderSide.none,
@@ -1223,7 +1477,7 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: const TextStyle(color: Colors.white70, fontSize: 15),
+        style: const TextStyle(color: Color(0xFF6F687B), fontSize: 15),
       ),
     ),
   );
@@ -1253,7 +1507,7 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
             const Text(
               'Requests dekhne ke liye Profile ke Friend Requests section mein jao.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(color: Color(0xFF6F687B)),
             ),
           ],
         ),
@@ -2109,10 +2363,25 @@ class _DirectChatPageState extends State<DirectChatPage> {
     }
 
     try {
+      final snapshot = await ref.get();
+      final user = FirebaseAuth.instance.currentUser;
+      if (!snapshot.exists || user == null) {
+        throw Exception('Message ya login nahi mila.');
+      }
+      if (snapshot.data()?['senderId'] != user.uid) {
+        throw Exception('Sirf apna message edit kar sakte ho.');
+      }
+
       await ref.update({
         'text': replacement,
         'editedAt': FieldValue.serverTimestamp(),
       });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Message updated successfully.')),
+        );
+      }
     } catch (e, st) {
       debugPrint('EDIT MESSAGE ERROR: $e');
       debugPrintStack(stackTrace: st);
@@ -2120,7 +2389,7 @@ class _DirectChatPageState extends State<DirectChatPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             duration: const Duration(seconds: 8),
-            content: Text('Edit failed: $e'),
+            content: Text('Message update nahi hua: $e'),
           ),
         );
       }
@@ -2404,117 +2673,143 @@ class _DirectChatPageState extends State<DirectChatPage> {
                 if (!snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final docs = snap.data!.docs;
-                if (docs.isEmpty) {
-                  return const Center(child: Text('Pehla message bhejo 👋'));
-                }
-                return ListView.builder(
-                  reverse: true,
-                  padding: const EdgeInsets.all(12),
-                  itemCount: docs.length,
-                  itemBuilder: (context, i) {
-                    final d = docs[i].data();
-                    final mine = d['senderId'] == user.uid;
-                    final readBy = List<String>.from(d['readBy'] ?? const []);
-                    final isRead = readBy.contains(widget.otherUserId);
-                    final createdAt = d['createdAt'];
-                    final time = createdAt is Timestamp
-                        ? TimeOfDay.fromDateTime(createdAt.toDate())
-                              .format(context)
-                        : '';
-                    return Align(
-                      alignment: mine
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: GestureDetector(
-                        onLongPress: mine
-                            ? () => _showMessageActions(
-                                docs[i].reference,
-                                d['text'] as String? ?? '',
-                              )
-                            : null,
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(vertical: 5),
-                          padding: const EdgeInsets.fromLTRB(14, 10, 12, 7),
-                          constraints: BoxConstraints(
-                            maxWidth: MediaQuery.of(context).size.width * .80,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: mine
-                                ? const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFFE94E91),
-                                      Color(0xFF7556D9),
-                                    ],
+                final allDocs = snap.data!.docs;
+                final chatData = FirebaseFirestore.instance
+                    .collection('chats')
+                    .doc(_chatId);
+                return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: chatData.snapshots(),
+                  builder: (context, chatSnap) {
+                    final chat = chatSnap.data?.data() ?? {};
+                    final clearedMap = chat['clearedAt'];
+                    final clearedAt = clearedMap is Map
+                        ? clearedMap[user.uid]
+                        : null;
+                    final visibleDocs = allDocs.where((message) {
+                      final createdAt = message.data()['createdAt'];
+                      if (clearedAt is Timestamp && createdAt is Timestamp) {
+                        return createdAt.toDate().isAfter(clearedAt.toDate());
+                      }
+                      return true;
+                    }).toList();
+
+                    if (visibleDocs.isEmpty) {
+                      return const Center(
+                        child: Text('Pehla message bhejo 👋'),
+                      );
+                    }
+                    return ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.all(12),
+                      itemCount: visibleDocs.length,
+                      itemBuilder: (context, i) {
+                        final d = visibleDocs[i].data();
+                        final mine = d['senderId'] == user.uid;
+                        final readBy = List<String>.from(
+                          d['readBy'] ?? const [],
+                        );
+                        final isRead = readBy.contains(widget.otherUserId);
+                        final createdAt = d['createdAt'];
+                        final time = createdAt is Timestamp
+                            ? TimeOfDay.fromDateTime(createdAt.toDate())
+                                  .format(context)
+                            : '';
+                        return Align(
+                          alignment: mine
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: GestureDetector(
+                            onLongPress: mine
+                                ? () => _showMessageActions(
+                                    visibleDocs[i].reference,
+                                    d['text'] as String? ?? '',
                                   )
                                 : null,
-                            color: mine ? null : const Color(0xFF1B2035),
-                            border: Border.all(
-                              color: mine
-                                  ? const Color(0x55FFB6DC)
-                                  : const Color(0xFF303650),
-                            ),
-                            borderRadius: BorderRadius.only(
-                              topLeft: const Radius.circular(18),
-                              topRight: const Radius.circular(18),
-                              bottomLeft: Radius.circular(mine ? 18 : 5),
-                              bottomRight: Radius.circular(mine ? 5 : 18),
-                            ),
-                            boxShadow: mine
-                                ? [
-                                    BoxShadow(
-                                      color: const Color(0xFFE94E91)
-                                          .withValues(alpha: .15),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  d['text'] as String? ?? '',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    height: 1.4,
-                                    fontSize: 15,
-                                  ),
-                                ),
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(vertical: 5),
+                              padding: const EdgeInsets.fromLTRB(14, 10, 12, 7),
+                              constraints: BoxConstraints(
+                                maxWidth:
+                                    MediaQuery.of(context).size.width * .80,
                               ),
-                              const SizedBox(height: 4),
-                              Row(
+                              decoration: BoxDecoration(
+                                gradient: mine
+                                    ? const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Color(0xFFE94E91),
+                                          Color(0xFF7556D9),
+                                        ],
+                                      )
+                                    : null,
+                                color: mine ? null : const Color(0xFF1B2035),
+                                border: Border.all(
+                                  color: mine
+                                      ? const Color(0x55FFB6DC)
+                                      : const Color(0xFF303650),
+                                ),
+                                borderRadius: BorderRadius.only(
+                                  topLeft: const Radius.circular(18),
+                                  topRight: const Radius.circular(18),
+                                  bottomLeft: Radius.circular(mine ? 18 : 5),
+                                  bottomRight: Radius.circular(mine ? 5 : 18),
+                                ),
+                                boxShadow: mine
+                                    ? [
+                                        BoxShadow(
+                                          color: const Color(0xFFE94E91)
+                                              .withValues(alpha: .15),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 3),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
-                                    time,
-                                    style: const TextStyle(
-                                      color: Color(0xCCFFFFFF),
-                                      fontSize: 10,
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      d['text'] as String? ?? '',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        height: 1.4,
+                                        fontSize: 15,
+                                      ),
                                     ),
                                   ),
-                                  if (mine) ...[
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                      isRead ? Icons.done_all : Icons.done,
-                                      size: 14,
-                                      color: isRead
-                                          ? const Color(0xFFB7F7FF)
-                                          : const Color(0xCCFFFFFF),
-                                    ),
-                                  ],
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        time,
+                                        style: const TextStyle(
+                                          color: Color(0xCCFFFFFF),
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                      if (mine) ...[
+                                        const SizedBox(width: 4),
+                                        Icon(
+                                          isRead ? Icons.done_all : Icons.done,
+                                          size: 14,
+                                          color: isRead
+                                              ? const Color(0xFFB7F7FF)
+                                              : const Color(0xCCFFFFFF),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ],
                               ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     );
                   },
                 );
@@ -2535,7 +2830,7 @@ class _DirectChatPageState extends State<DirectChatPage> {
                         hintText: 'Message...',
                         counterText: '',
                         filled: true,
-                        fillColor: const Color(0xFF15182B),
+                        fillColor: const Color(0xFFF2EFF8),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 18,
                           vertical: 14,
@@ -2543,13 +2838,13 @@ class _DirectChatPageState extends State<DirectChatPage> {
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(26),
                           borderSide: const BorderSide(
-                            color: Color(0xFF343852),
+                            color: Color(0xFFE5DFEF),
                           ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(26),
                           borderSide: const BorderSide(
-                            color: Color(0xFF343852),
+                            color: Color(0xFFE5DFEF),
                           ),
                         ),
                         focusedBorder: OutlineInputBorder(
@@ -2596,7 +2891,63 @@ class FirestoreChatsPage extends StatefulWidget {
 }
 
 class _FirestoreChatsPageState extends State<FirestoreChatsPage> {
-  bool _showHidden = false;
+  Future<void> _clearAllChatsForMe() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !user.emailVerified) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear All Chats?'),
+        content: const Text(
+          'Chat history aapke liye clear hogi. Doosre user ke messages '
+          'delete nahi honge. Yeh action undo nahi kiya ja sakta.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Clear for me'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final db = FirebaseFirestore.instance;
+      final chats = await db
+          .collection('chats')
+          .where('participants', arrayContains: user.uid)
+          .get();
+
+      final batch = db.batch();
+      for (final doc in chats.docs) {
+        batch.update(doc.reference, {
+          'clearedAt.${user.uid}': FieldValue.serverTimestamp(),
+          'unreadCounts.${user.uid}': 0,
+        });
+      }
+      if (chats.docs.isNotEmpty) await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Chats aapke liye clear kar di gayi hain.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Chats clear nahi hui: $e')));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2619,27 +2970,45 @@ class _FirestoreChatsPageState extends State<FirestoreChatsPage> {
           return const Center(child: CircularProgressIndicator());
         }
         final visibleChats = snap.data!.docs.where((doc) {
-          final hiddenBy = doc.data()['hiddenBy'];
-          final isHidden = hiddenBy is Map && hiddenBy[user.uid] == true;
-          return _showHidden ? isHidden : !isHidden;
+          final data = doc.data();
+          final hiddenBy = data['hiddenBy'];
+          if (hiddenBy is Map && hiddenBy[user.uid] == true) {
+            return false;
+          }
+          final clearMap = data['clearedAt'];
+          final cleared = clearMap is Map ? clearMap[user.uid] : null;
+          final updated = data['updatedAt'];
+          if (cleared is Timestamp &&
+              updated is Timestamp &&
+              !updated.toDate().isAfter(cleared.toDate())) {
+            return false;
+          }
+          return true;
         }).toList();
         if (visibleChats.isEmpty) {
-          return const Center(
-            child: Text('Abhi chats nahi hain. Discover se message karo 💌'),
+          return Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Abhi chats nahi hain. Discover se message karo 💌'),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _clearAllChatsForMe,
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  label: const Text('Clear All Chats'),
+                ),
+              ],
+            ),
           );
         }
         return ListView(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: OutlinedButton.icon(
-                onPressed: () => setState(() => _showHidden = !_showHidden),
-                icon: Icon(
-                  _showHidden
-                      ? Icons.chat_bubble_outline
-                      : Icons.visibility_off_outlined,
-                ),
-                label: Text(_showHidden ? 'Back to Chats' : 'Hidden Chats'),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: _clearAllChatsForMe,
+                icon: const Icon(Icons.delete_sweep_outlined),
+                label: const Text('Clear All Chats'),
               ),
             ),
             ...visibleChats.map((doc) {
@@ -2688,44 +3057,6 @@ class _FirestoreChatsPageState extends State<FirestoreChatsPage> {
                             ),
                           ),
                         if (unread > 0) const SizedBox(width: 4),
-                        PopupMenuButton<String>(
-                          tooltip: 'Chat options',
-                          onSelected: (value) async {
-                            if (value != 'hide' && value != 'unhide') return;
-                            try {
-                              await doc.reference.update({
-                                'hiddenBy.${user.uid}': value == 'hide',
-                              });
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      value == 'hide'
-                                          ? 'Chat hidden'
-                                          : 'Chat restored',
-                                    ),
-                                  ),
-                                );
-                              }
-                            } catch (_) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Chat hide nahi ho payi.'),
-                                  ),
-                                );
-                              }
-                            }
-                          },
-                          itemBuilder: (_) => [
-                            PopupMenuItem(
-                              value: _showHidden ? 'unhide' : 'hide',
-                              child: Text(
-                                _showHidden ? 'Unhide chat' : 'Hide chat',
-                              ),
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                     onTap: () => Navigator.push(

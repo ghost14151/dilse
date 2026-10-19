@@ -49,7 +49,12 @@ export default {
       );
 
       if (!verifyResponse.ok) {
-        return json({ error: "Invalid Firebase login" }, 401);
+        const details = await verifyResponse.json().catch(() => ({}));
+        console.error("Firebase verification failed:", JSON.stringify(details));
+        return json({
+          error: "Invalid Firebase login",
+          firebaseError: details.error?.message || "Unknown verification error"
+        }, 401);
       }
 
       const account = await verifyResponse.json();

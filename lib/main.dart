@@ -1,20 +1,119 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
 import 'config/agora_config.dart';
 import 'voice_room_page.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth_gate.dart';
 import 'real_social_pages.dart';
 
+final GlobalKey<NavigatorState> dilseNavigatorKey = GlobalKey<NavigatorState>();
+
+final FlutterLocalNotificationsPlugin dilseLocalNotifications =
+    FlutterLocalNotificationsPlugin();
+
+const AndroidNotificationChannel dilseMessageChannel =
+    AndroidNotificationChannel(
+      'dilse_messages',
+      'DilSe messages',
+      description: 'Notifications for new DilSe messages',
+      importance: Importance.high,
+    );
+
+Future<void> _openDilSeNotification(String? payload) async {
+  if (payload == null || payload.isEmpty) return;
+  try {
+    final data = jsonDecode(payload) as Map<String, dynamic>;
+    final otherUserId = data['otherUserId'] as String?;
+    final otherName = data['otherName'] as String? ?? 'Friend';
+    if (otherUserId == null || otherUserId.isEmpty) return;
+
+    final navigator = dilseNavigatorKey.currentState;
+    if (navigator == null) return;
+
+    navigator.push(
+      MaterialPageRoute(
+        builder: (_) =>
+            DirectChatPage(otherUserId: otherUserId, otherName: otherName),
+      ),
+    );
+  } catch (e) {
+    debugPrint('DilSe notification tap error: $e');
+  }
+}
+
+Future<void> _initializeDilSeNotifications() async {
+  const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+  const settings = InitializationSettings(android: androidSettings);
+
+  await dilseLocalNotifications.initialize(
+    settings: settings,
+    onDidReceiveNotificationResponse: (response) {
+      _openDilSeNotification(response.payload);
+    },
+  );
+
+  await dilseLocalNotifications
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(dilseMessageChannel);
+}
+
+Future<void> _showDilSeMessageNotification(RemoteMessage message) async {
+  final title =
+      message.notification?.title ??
+      message.data['title']?.toString() ??
+      'DilSe';
+  final body =
+      message.notification?.body ??
+      message.data['body']?.toString() ??
+      'Aapko ek naya message mila hai ❤️';
+
+  await dilseLocalNotifications.show(
+    id: message.hashCode,
+    title: title,
+    body: body,
+    notificationDetails: const NotificationDetails(
+      android: AndroidNotificationDetails(
+        'dilse_messages',
+        'DilSe messages',
+        channelDescription: 'Notifications for new DilSe messages',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+      ),
+    ),
+    payload: jsonEncode({
+      'otherUserId': message.data['otherUserId'],
+      'otherName': message.data['otherName'] ?? 'Friend',
+    }),
+  );
+}
+
+@pragma('vm:entry-point')
+Future<void> dilseFirebaseMessagingBackgroundHandler(
+  RemoteMessage message,
+) async {
+  await Firebase.initializeApp();
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  FirebaseMessaging.onBackgroundMessage(
+    dilseFirebaseMessagingBackgroundHandler,
+  );
   runApp(const DilSeApp());
 }
 
@@ -37,39 +136,40 @@ class DilSeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: dilseNavigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'DilSe',
       theme: ThemeData(
         useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: bg,
-        colorScheme: const ColorScheme.dark(
+        brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFF8F7FC),
+        colorScheme: const ColorScheme.light(
           primary: pink,
           secondary: purple,
-          surface: surface,
+          surface: Colors.white,
           onPrimary: Colors.white,
           onSecondary: Colors.white,
-          onSurface: Colors.white,
-          error: Color(0xFFFF6B75),
+          onSurface: Color(0xFF201A2C),
+          error: Color(0xFFD92D45),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: bg,
-          foregroundColor: Colors.white,
+          backgroundColor: Colors.white,
+          foregroundColor: Color(0xFF201A2C),
           elevation: 0,
         ),
-        textTheme: ThemeData.dark().textTheme.apply(
-          bodyColor: Colors.white,
-          displayColor: Colors.white,
+        textTheme: ThemeData.light().textTheme.apply(
+          bodyColor: const Color(0xFF201A2C),
+          displayColor: const Color(0xFF201A2C),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-          fillColor: surface,
-          labelStyle: const TextStyle(color: Colors.white70),
-          hintStyle: const TextStyle(color: Colors.white54),
+          fillColor: const Color(0xFFF2EFF8),
+          labelStyle: const TextStyle(color: Color(0xFF6F687B)),
+          hintStyle: const TextStyle(color: Color(0xFF8C8599)),
           prefixIconColor: purple,
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: Color(0xFF343852)),
+            borderSide: const BorderSide(color: Color(0xFFE5DFEF)),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
@@ -78,13 +178,13 @@ class DilSeApp extends StatelessWidget {
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
         ),
         navigationBarTheme: const NavigationBarThemeData(
-          backgroundColor: surface,
-          indicatorColor: Color(0xFF45233F),
+          backgroundColor: Colors.white,
+          indicatorColor: Color(0xFFFBE4F1),
           labelTextStyle: WidgetStatePropertyAll(
-            TextStyle(color: Colors.white, fontSize: 12),
+            TextStyle(color: Color(0xFF201A2C), fontSize: 12),
           ),
           iconTheme: WidgetStatePropertyAll(
-            IconThemeData(color: Colors.white70),
+            IconThemeData(color: Color(0xFF6F687B)),
           ),
         ),
         filledButtonTheme: FilledButtonThemeData(
@@ -114,6 +214,62 @@ class _DilSeLaunchFlowState extends State<DilSeLaunchFlow> {
   void initState() {
     super.initState();
     _prepare();
+    _setupFirebaseMessaging();
+  }
+
+  Future<void> _setupFirebaseMessaging() async {
+    try {
+      await _initializeDilSeNotifications();
+
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+
+      Future<void> saveToken(String? token) async {
+        final user = FirebaseAuth.instance.currentUser;
+        if (token == null ||
+            token.isEmpty ||
+            user == null ||
+            !user.emailVerified) {
+          return;
+        }
+        try {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .collection('fcmTokens')
+              .doc(token)
+              .set({'token': token, 'updatedAt': FieldValue.serverTimestamp()});
+        } catch (e) {
+          debugPrint('DilSe FCM token save failed: $e');
+        }
+      }
+
+      await saveToken(await messaging.getToken());
+      messaging.onTokenRefresh.listen(saveToken);
+
+      FirebaseAuth.instance.authStateChanges().listen((user) async {
+        if (user != null && user.emailVerified) {
+          await saveToken(await messaging.getToken());
+        }
+      });
+
+      FirebaseMessaging.onMessage.listen((message) {
+        _showDilSeMessageNotification(message);
+      });
+
+      FirebaseMessaging.onMessageOpenedApp.listen((message) {
+        _openDilSeNotification(jsonEncode(message.data));
+      });
+
+      final initialMessage = await messaging.getInitialMessage();
+      if (initialMessage != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _openDilSeNotification(jsonEncode(initialMessage.data));
+        });
+      }
+    } catch (e) {
+      debugPrint('DilSe FCM setup failed: $e');
+    }
   }
 
   Future<void> _prepare() async {
@@ -210,11 +366,6 @@ class _DilSeOnboardingState extends State<DilSeOnboarding> {
       Icons.chat_bubble_rounded,
       'Dil khol kar baat karo',
       'Private chats mein baatein karo aur apni dosti badhao.',
-    ),
-    (
-      Icons.graphic_eq_rounded,
-      'Saath mein raho',
-      'Voice rooms join karo aur community ka hissa bano.',
     ),
   ];
 
@@ -423,7 +574,6 @@ class _MainScreenState extends State<MainScreen> {
     HomePage(onOpenTab: (index) => setState(() => tab = index)),
     const FirestoreDiscoverPage(),
     const ChatsPage(),
-    const RoomsPage(),
     const FirestoreProfilePage(),
   ];
 
@@ -464,11 +614,6 @@ class _MainScreenState extends State<MainScreen> {
             icon: Icon(Icons.chat_bubble_outline),
             selectedIcon: Icon(Icons.chat_bubble),
             label: 'Chat',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.graphic_eq),
-            selectedIcon: Icon(Icons.mic),
-            label: 'Voice',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
@@ -885,13 +1030,6 @@ class _HomePageState extends State<HomePage> {
             color: pink,
             onTap: () => _openTab(2),
           ),
-          FeatureCard(
-            icon: Icons.mic_rounded,
-            title: 'Voice Rooms',
-            subtitle: 'Voice room section kholo.',
-            color: Color(0xFF269B8D),
-            onTap: () => _openTab(3),
-          ),
           const SizedBox(height: 18),
           const Center(
             child: Text(
@@ -981,14 +1119,34 @@ class RoomsPage extends StatelessWidget {
   const RoomsPage({super.key});
 
   static const _rooms = [
-    ('Music & Masti', 'Songs, games aur fun conversations',
-      '12 online', Icons.music_note_rounded, Color(0xFFFF4F9A)),
-    ('New Friends Club', 'Naye logon se milo aur baat karo',
-      '8 online', Icons.groups_rounded, Color(0xFF9667FF)),
-    ('Late Night Talks', 'Relax karo, apni baat share karo',
-      '5 online', Icons.nightlight_round, Color(0xFF4F8DFF)),
-    ('Dil Ki Baatein', 'Positive vibes aur friendly chats',
-      '3 online', Icons.favorite_rounded, Color(0xFFFF8066)),
+    (
+      'Music & Masti',
+      'Songs, games aur fun conversations',
+      '12 online',
+      Icons.music_note_rounded,
+      Color(0xFFFF4F9A),
+    ),
+    (
+      'New Friends Club',
+      'Naye logon se milo aur baat karo',
+      '8 online',
+      Icons.groups_rounded,
+      Color(0xFF9667FF),
+    ),
+    (
+      'Late Night Talks',
+      'Relax karo, apni baat share karo',
+      '5 online',
+      Icons.nightlight_round,
+      Color(0xFF4F8DFF),
+    ),
+    (
+      'Dil Ki Baatein',
+      'Positive vibes aur friendly chats',
+      '3 online',
+      Icons.favorite_rounded,
+      Color(0xFFFF8066),
+    ),
   ];
 
   @override
@@ -1026,12 +1184,18 @@ class RoomsPage extends StatelessWidget {
                   CircleAvatar(
                     radius: 25,
                     backgroundColor: Colors.white24,
-                    child: Icon(Icons.graphic_eq_rounded,
-                        color: Colors.white, size: 30),
+                    child: Icon(
+                      Icons.graphic_eq_rounded,
+                      color: Colors.white,
+                      size: 30,
+                    ),
                   ),
                   Spacer(),
-                  Icon(Icons.auto_awesome_rounded,
-                      color: Colors.white70, size: 24),
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    color: Colors.white70,
+                    size: 24,
+                  ),
                 ],
               ),
               SizedBox(height: 20),
@@ -1068,8 +1232,10 @@ class RoomsPage extends StatelessWidget {
         const Row(
           children: [
             Expanded(
-              child: Text('Explore Rooms',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              child: Text(
+                'Explore Rooms',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
             ),
             Icon(Icons.headphones_rounded, color: Color(0xFFFF3D9A)),
           ],
@@ -1080,13 +1246,15 @@ class RoomsPage extends StatelessWidget {
           style: TextStyle(color: Colors.white60, fontSize: 13),
         ),
         const SizedBox(height: 16),
-        ..._rooms.map((room) => _PremiumRoomCard(
-          title: room.$1,
-          subtitle: room.$2,
-          people: room.$3,
-          icon: room.$4,
-          accent: room.$5,
-        )),
+        ..._rooms.map(
+          (room) => _PremiumRoomCard(
+            title: room.$1,
+            subtitle: room.$2,
+            people: room.$3,
+            icon: room.$4,
+            accent: room.$5,
+          ),
+        ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(13),
@@ -1103,7 +1271,11 @@ class RoomsPage extends StatelessWidget {
               Expanded(
                 child: Text(
                   'Abhi rooms ka audio demo hai. Live voice connection abhi setup hona baaki hai.',
-                  style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
                 ),
               ),
             ],
@@ -1157,18 +1329,24 @@ class _PremiumRoomCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    )),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white70, fontSize: 11, height: 1.3,
-                    )),
+                Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    height: 1.3,
+                  ),
+                ),
                 const SizedBox(height: 9),
                 Row(
                   children: [
@@ -1181,8 +1359,7 @@ class _PremiumRoomCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text(people,
-                        style: TextStyle(color: accent, fontSize: 11)),
+                    Text(people, style: TextStyle(color: accent, fontSize: 11)),
                   ],
                 ),
               ],
