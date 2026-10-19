@@ -2113,10 +2113,16 @@ class _DirectChatPageState extends State<DirectChatPage> {
         'text': replacement,
         'editedAt': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('EDIT MESSAGE ERROR: $e');
+      debugPrintStack(stackTrace: st);
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Edit failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 8),
+            content: Text('Edit failed: $e'),
+          ),
+        );
       }
     }
   }
