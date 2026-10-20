@@ -333,7 +333,7 @@ class _DilSeLaunchFlowState extends State<DilSeLaunchFlow> {
                 const SizedBox(height: 8),
                 const Text(
                   'Dosti Jo Dil Tak Jaaye ❤️',
-                  style: TextStyle(color: Colors.white70, fontSize: 15),
+                  style: TextStyle(color: Color(0xFF201A2C), fontSize: 15),
                 ),
               ],
             ),

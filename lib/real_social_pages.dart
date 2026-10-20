@@ -681,6 +681,55 @@ class HiddenChatsManagerPage extends StatelessWidget {
   }
 }
 
+class _EditMessageDialog extends StatefulWidget {
+  const _EditMessageDialog({required this.initialText});
+
+  final String initialText;
+
+  @override
+  State<_EditMessageDialog> createState() => _EditMessageDialogState();
+}
+
+class _EditMessageDialogState extends State<_EditMessageDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit message'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: 4000,
+        maxLines: 5,
+        decoration: const InputDecoration(hintText: 'Message'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
 class DailyStreakPage extends StatefulWidget {
   const DailyStreakPage({super.key});
 
@@ -766,7 +815,33 @@ class _DailyStreakPageState extends State<DailyStreakPage> {
         stream: ref.snapshots(),
         builder: (context, snap) {
           if (snap.hasError) {
-            return const Center(child: Text('Streak load nahi ho paayi.'));
+            debugPrint('DAILY STREAK LOAD ERROR: ${snap.error}');
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off, size: 48, color: _pink),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Streak load nahi ho paayi.',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Firebase error: ${snap.error}',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: () => setState(() {}),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
           if (!snap.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -1332,7 +1407,9 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
                                                               ? const Color(
                                                                   0xFF67E8A5,
                                                                 )
-                                                              : Color(0xFF8C8599),
+                                                              : Color(
+                                                                  0xFF8C8599,
+                                                                ),
                                                           fontSize: 12,
                                                         ),
                                                       ),
@@ -1484,32 +1561,16 @@ class _MyFriendsPageState extends State<MyFriendsPage> {
 
   Widget _requestsShortcut(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.mark_email_unread_rounded,
-              color: Color(0xFFFF5AA5),
-              size: 56,
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Friend Requests',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Requests dekhne ke liye Profile ke Friend Requests section mein jao.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0xFF6F687B)),
-            ),
-          ],
+      child: FilledButton.icon(
+        onPressed: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const FriendRequestsPage())),
+        icon: const Icon(Icons.mark_email_unread_rounded),
+        label: const Text('Friend Requests dekho'),
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFFFF3D9A),
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         ),
       ),
     );
@@ -1620,216 +1681,12 @@ class BlockedUsersPage extends StatelessWidget {
   }
 }
 
-class FirestoreDiscoverPage extends StatefulWidget {
+class FirestoreDiscoverPage extends StatelessWidget {
   const FirestoreDiscoverPage({super.key});
 
   @override
-  State<FirestoreDiscoverPage> createState() => _FirestoreDiscoverPageState();
-}
-
-class _FirestoreDiscoverPageState extends State<FirestoreDiscoverPage> {
-  final _search = TextEditingController();
-  String _query = '';
-  Set<String> _hiddenUserIds = {};
-  bool _privacyLoaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadHiddenUsers();
-  }
-
-  Future<void> _loadHiddenUsers() async {
-    final me = FirebaseAuth.instance.currentUser;
-    if (me == null) return;
-
-    try {
-      final db = FirebaseFirestore.instance;
-      final results = await Future.wait([
-        db
-            .collection('friendRequests')
-            .where('senderId', isEqualTo: me.uid)
-            .where('status', isEqualTo: 'accepted')
-            .get(),
-        db
-            .collection('friendRequests')
-            .where('receiverId', isEqualTo: me.uid)
-            .where('status', isEqualTo: 'accepted')
-            .get(),
-        db.collection('blocks').where('blockerId', isEqualTo: me.uid).get(),
-        db.collection('blocks').where('blockedUserId', isEqualTo: me.uid).get(),
-      ]);
-
-      final hidden = <String>{};
-      for (final doc in results[0].docs) {
-        final id = doc.data()['receiverId'] as String?;
-        if (id != null) hidden.add(id);
-      }
-      for (final doc in results[1].docs) {
-        final id = doc.data()['senderId'] as String?;
-        if (id != null) hidden.add(id);
-      }
-      for (final doc in results[2].docs) {
-        final id = doc.data()['blockedUserId'] as String?;
-        if (id != null) hidden.add(id);
-      }
-      for (final doc in results[3].docs) {
-        final id = doc.data()['blockerId'] as String?;
-        if (id != null) hidden.add(id);
-      }
-
-      if (mounted) {
-        setState(() {
-          _hiddenUserIds = hidden;
-          _privacyLoaded = true;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _privacyLoaded = true);
-    }
-  }
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null || !user.emailVerified) {
-      return const Center(child: Text('Verified login zaroori hai.'));
-    }
-
-    final prefix = _query.trim().toLowerCase();
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Discover Friends 💕',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.bold,
-                        color: _purple,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Refresh profiles',
-                    onPressed: _loadHiddenUsers,
-                    icon: const Icon(Icons.refresh, color: _purple),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _search,
-                onChanged: (value) => setState(() => _query = value),
-                decoration: InputDecoration(
-                  hintText: 'Naam se users search karo',
-                  prefixIcon: const Icon(Icons.search),
-                  filled: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: prefix.length < 2
-              ? const Center(
-                  child: Text('Search ke liye kam se kam 2 letters likho.'),
-                )
-              : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .orderBy('searchName')
-                      .startAt([prefix])
-                      .endAt(['$prefix\uf8ff'])
-                      .limit(30)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.hasError) {
-                      return const Center(
-                        child: Text(
-                          'Search error. Firestore Rules check karo.',
-                        ),
-                      );
-                    }
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    if (!_privacyLoaded) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final users = snapshot.data!.docs
-                        .where(
-                          (doc) =>
-                              doc.id != user.uid &&
-                              !_hiddenUserIds.contains(doc.id),
-                        )
-                        .toList();
-
-                    if (users.isEmpty) {
-                      return const Center(
-                        child: Text(
-                          'Koi profile nahi mili. Naam ke shuru ke letters try karo.',
-                        ),
-                      );
-                    }
-
-                    return ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: users.length,
-                      itemBuilder: (context, index) {
-                        final data = users[index].data();
-                        final name =
-                            data['displayName'] as String? ?? 'DilSe User';
-                        final bio = data['bio'] as String? ?? '';
-
-                        return Card(
-                          child: ListTile(
-                            leading: dilseAvatar(data['avatarId'] as String?),
-                            title: Text(name),
-                            subtitle: Text(bio.isEmpty ? 'DilSe member' : bio),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () async {
-                              await Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => PublicUserProfilePage(
-                                    userId: users[index].id,
-                                    name: name,
-                                    bio: bio,
-                                    avatarId: data["avatarId"] as String?,
-                                  ),
-                                ),
-                              );
-                              await _loadHiddenUsers();
-                            },
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
+    return const MyFriendsPage();
   }
 }
 
@@ -2328,32 +2185,10 @@ class _DirectChatPageState extends State<DirectChatPage> {
     DocumentReference<Map<String, dynamic>> ref,
     String oldText,
   ) async {
-    final controller = TextEditingController(text: oldText);
     final replacement = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit message'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 4000,
-          maxLines: 5,
-          decoration: const InputDecoration(hintText: 'Message'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () =>
-                Navigator.pop(dialogContext, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (dialogContext) => _EditMessageDialog(initialText: oldText),
     );
-    controller.dispose();
 
     if (replacement == null ||
         replacement.isEmpty ||
@@ -2687,7 +2522,9 @@ class _DirectChatPageState extends State<DirectChatPage> {
                         : null;
                     final visibleDocs = allDocs.where((message) {
                       final createdAt = message.data()['createdAt'];
-                      if (clearedAt is Timestamp && createdAt is Timestamp) {
+                      if (clearedAt is Timestamp) {
+                        // Fail closed for old messages with missing timestamps.
+                        if (createdAt is! Timestamp) return false;
                         return createdAt.toDate().isAfter(clearedAt.toDate());
                       }
                       return true;
@@ -2978,10 +2815,12 @@ class _FirestoreChatsPageState extends State<FirestoreChatsPage> {
           final clearMap = data['clearedAt'];
           final cleared = clearMap is Map ? clearMap[user.uid] : null;
           final updated = data['updatedAt'];
-          if (cleared is Timestamp &&
-              updated is Timestamp &&
-              !updated.toDate().isAfter(cleared.toDate())) {
-            return false;
+          if (cleared is Timestamp) {
+            // Keep the chat hidden until a newer message updates the chat.
+            if (updated is! Timestamp ||
+                !updated.toDate().isAfter(cleared.toDate())) {
+              return false;
+            }
           }
           return true;
         }).toList();
