@@ -290,11 +290,7 @@ class _DilSeLaunchFlowState extends State<DilSeLaunchFlow> {
         backgroundColor: bg,
         body: Container(
           decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              center: Alignment(0, -0.2),
-              radius: 0.9,
-              colors: [Color(0x664F247D), bg],
-            ),
+            color: Colors.white,
           ),
           child: Center(
             child: Column(
@@ -328,12 +324,12 @@ class _DilSeLaunchFlowState extends State<DilSeLaunchFlow> {
                 const SizedBox(height: 22),
                 const Text(
                   'DilSe',
-                  style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900),
+                  style: TextStyle(fontSize: 38, fontWeight: FontWeight.w900, color: Color(0xFF39245C), letterSpacing: 0.4),
                 ),
                 const SizedBox(height: 8),
                 const Text(
                   'Dosti Jo Dil Tak Jaaye ❤️',
-                  style: TextStyle(color: Color(0xFF201A2C), fontSize: 15),
+                  style: TextStyle(color: Color(0xFF925CFF), fontSize: 15, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -692,7 +688,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                     Text(
                       'Dosti Jo Dil Tak Jaaye ❤️',
-                      style: TextStyle(fontSize: 12, color: Colors.white70),
+                      style: TextStyle(fontSize: 12, color: Color(0xFF5C536B), fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -991,7 +987,9 @@ class _HomePageState extends State<HomePage> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
                                   ),
                                 ),
                                 const SizedBox(height: 3),
