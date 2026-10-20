@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'main.dart';
 
@@ -19,7 +20,7 @@ class AuthGate extends StatelessWidget {
         final user = snapshot.data;
         if (user == null) return const EmailLoginScreen();
         if (!user.emailVerified) return const EmailVerificationScreen();
-        return const MainScreen();
+        return const AgeNoticeGate();
       },
     );
   }
@@ -388,6 +389,160 @@ class _EmailLoginScreenState extends State<EmailLoginScreen> {
                   'Account banane par email verification bheji jayegi.',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class AgeNoticeGate extends StatefulWidget {
+  const AgeNoticeGate({super.key});
+
+  @override
+  State<AgeNoticeGate> createState() => _AgeNoticeGateState();
+}
+
+class _AgeNoticeGateState extends State<AgeNoticeGate> {
+  bool loading = true;
+  bool accepted = false;
+  bool confirmAdult = false;
+  bool saving = false;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    loadNotice();
+  }
+
+  Future<void> loadNotice() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (!mounted) return;
+      setState(() {
+        accepted = doc.data()?['ageNoticeAccepted'] == true &&
+            doc.data()?['ageOver18'] == true;
+        loading = false;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          loading = false;
+          error = 'Age notice load nahi hua. Internet check karo.';
+        });
+      }
+    }
+  }
+
+  Future<void> confirmAndContinue() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !confirmAdult || saving) return;
+
+    setState(() {
+      saving = true;
+      error = null;
+    });
+
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+        'uid': user.uid,
+        'ageNoticeAccepted': true,
+        'ageOver18': true,
+        'ageNoticeAcceptedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (mounted) setState(() => accepted = true);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          error = 'Save nahi hua. Internet ya Firestore rules check karo.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (accepted) return const MainScreen();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('DilSe age notice')),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Icon(
+                  Icons.verified_user_outlined,
+                  size: 68,
+                  color: Color(0xFF925CFF),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  '18+ Notice',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 27, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'DilSe ke social features 18 saal ya usse zyada umar ke '
+                  'users ke liye hain. Aage badhne se pehle apni age confirm '
+                  'karo. Yeh self-declaration hai, official age verification nahi.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 18),
+                CheckboxListTile(
+                  value: confirmAdult,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  onChanged: saving
+                      ? null
+                      : (value) => setState(
+                            () => confirmAdult = value ?? false,
+                          ),
+                  title: const Text('Meri umar 18 saal ya usse zyada hai.'),
+                ),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Text(
+                      error!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                FilledButton(
+                  onPressed: saving || !confirmAdult
+                      ? null
+                      : confirmAndContinue,
+                  child: Text(saving ? 'Saving...' : 'Confirm and continue'),
+                ),
+                TextButton(
+                  onPressed: saving
+                      ? null
+                      : () => FirebaseAuth.instance.signOut(),
+                  child: const Text('Sign out'),
                 ),
               ],
             ),
