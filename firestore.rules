@@ -84,7 +84,8 @@ service cloud.firestore {
         && request.resource.data.uid == userId
         && request.resource.data.keys().hasOnly([
           'uid', 'displayName', 'bio', 'photoUrl', 'avatarId',
-          'searchName', 'createdAt', 'updatedAt'
+          'searchName', 'createdAt', 'updatedAt',
+          'ageNoticeAccepted', 'ageOver18', 'ageNoticeAcceptedAt'
         ]);
       allow delete: if false;
     }
