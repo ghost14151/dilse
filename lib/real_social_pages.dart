@@ -4,6 +4,7 @@ import 'package:firebase_database/firebase_database.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -751,45 +752,37 @@ class _DailyStreakPageState extends State<DailyStreakPage> {
 
     setState(() => _busy = true);
     try {
-      final ref = FirebaseFirestore.instance
-          .collection('dailyStreaks')
-          .doc(user.uid);
-
-      await FirebaseFirestore.instance.runTransaction((tx) async {
-        final snapshot = await tx.get(ref);
-        final now = DateTime.now();
-        final today = _dateKey(now);
-
-        if (snapshot.exists && snapshot.data()?['lastCheckInDate'] == today) {
-          throw Exception('Aaj ka check-in pehle ho chuka hai.');
-        }
-
-        final old = snapshot.data() ?? <String, dynamic>{};
-        final last = old['lastCheckInDate'] as String?;
-        final oldCount = (old['streak'] as num?)?.toInt() ?? 0;
-        final yesterday = _dateKey(now.subtract(const Duration(days: 1)));
-        final nextCount = last == yesterday ? oldCount + 1 : 1;
-
-        tx.set(ref, {
-          'uid': user.uid,
-          'streak': nextCount,
-          'lastCheckInDate': today,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      });
+      final callable = FirebaseFunctions.instance
+          .httpsCallable('dailyStreakCheckIn');
+      final result = await callable.call();
+      final data = Map<String, dynamic>.from(result.data as Map);
+      final already = data['alreadyCheckedIn'] == true;
 
       if (mounted) {
+        final unlocked = data['newlyUnlocked'] as List? ?? [];
+        final message = already
+            ? 'Aaj ka check-in ho chuka hai ❤️'
+            : unlocked.isEmpty
+                ? 'Daily check-in complete! 🔥'
+                : 'Streak ${data['streak']} days! 🎉 '
+                    'Milestone reward unlock hua!';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Daily check-in complete! 🔥')),
+          SnackBar(content: Text(message)),
         );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        final message = e.code == 'permission-denied'
+            ? 'Pehle email verify karo.'
+            : 'Check-in nahi hua: ${e.message ?? e.code}';
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
       }
     } catch (e) {
       if (mounted) {
-        final message = e.toString().contains('pehle ho chuka')
-            ? 'Aaj ka check-in ho chuka hai ❤️'
-            : 'Check-in nahi hua: $e';
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(message)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Check-in nahi hua: $e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -960,15 +953,6 @@ class DilSeSettingsSection extends StatelessWidget {
             () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const FriendRequestsPage()),
-            ),
-          ),
-          option(
-            Icons.local_fire_department,
-            'Daily DilSe Streak',
-            'Daily check-in aur streak count',
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const DailyStreakPage()),
             ),
           ),
           option(

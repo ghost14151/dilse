@@ -147,3 +147,80 @@ exports.sendDilSeMessageNotification = onDocumentCreated(
       }
     },
 );
+
+
+// Server-authoritative daily check-in and milestone rewards.
+exports.dailyStreakCheckIn = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Please sign in first.");
+  }
+  if (request.auth.token.email_verified !== true) {
+    throw new HttpsError(
+        "permission-denied", "Verify your email before checking in.",
+    );
+  }
+
+  const uid = request.auth.uid;
+  const db = admin.firestore();
+  const ref = db.collection("dailyStreaks").doc(uid);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const yesterdayDate = new Date(now.getTime() - 86400000);
+  const yesterday = yesterdayDate.toISOString().slice(0, 10);
+  const milestones = [
+    {days: 3, points: 30, badge: "streak_3"},
+    {days: 7, points: 70, badge: "streak_7"},
+    {days: 15, points: 150, badge: "streak_15"},
+    {days: 30, points: 300, badge: "streak_30"},
+    {days: 60, points: 600, badge: "streak_60"},
+    {days: 100, points: 1000, badge: "streak_100"},
+  ];
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const old = snap.exists ? snap.data() : {};
+    if (old.lastCheckInDate === today) {
+      return {
+        alreadyCheckedIn: true,
+        streak: old.streak || 0,
+        points: old.points || 0,
+        unlockedMilestones: old.unlockedMilestones || [],
+      };
+    }
+
+    const previous = Number.isInteger(old.streak) ? old.streak : 0;
+    const next = old.lastCheckInDate === yesterday ? previous + 1 : 1;
+    const unlocked = Array.isArray(old.unlockedMilestones) ?
+        old.unlockedMilestones : [];
+    const newlyUnlocked = milestones.filter(
+        (m) => m.days === next && !unlocked.includes(m.days),
+    );
+    const addedPoints = newlyUnlocked.reduce((sum, m) => sum + m.points, 0);
+    const allUnlocked = [...new Set([
+      ...unlocked, ...newlyUnlocked.map((m) => m.days),
+    ])];
+
+    tx.set(ref, {
+      uid,
+      streak: next,
+      lastCheckInDate: today,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      points: (Number.isInteger(old.points) ? old.points : 0) + addedPoints,
+      unlockedMilestones: allUnlocked,
+      badges: [...new Set([
+        ...(Array.isArray(old.badges) ? old.badges : []),
+        ...newlyUnlocked.map((m) => m.badge),
+      ])],
+    });
+
+    return {
+      alreadyCheckedIn: false,
+      streak: next,
+      points: (Number.isInteger(old.points) ? old.points : 0) + addedPoints,
+      newlyUnlocked: newlyUnlocked.map((m) => ({
+        days: m.days, points: m.points, badge: m.badge,
+      })),
+      unlockedMilestones: allUnlocked,
+    };
+  });
+});

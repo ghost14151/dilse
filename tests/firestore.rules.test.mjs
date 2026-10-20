@@ -113,3 +113,66 @@ test('message creation requires sender readBy and usage accounting', async () =>
 
   await assertSucceeds(batch.commit());
 });
+
+
+test('daily streak owner can read their own streak', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'dailyStreaks/alice'), {
+      uid: 'alice',
+      streak: 3,
+      lastCheckInDate: '2026-10-20',
+      points: 30,
+    });
+  });
+
+  const snap = await assertSucceeds(
+    getDoc(doc(user('alice'), 'dailyStreaks/alice')),
+  );
+  assert.equal(snap.data().streak, 3);
+});
+
+test('another user cannot read a private daily streak', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'dailyStreaks/alice'), {
+      uid: 'alice',
+      streak: 3,
+    });
+  });
+
+  await assertFails(getDoc(doc(user('bob'), 'dailyStreaks/alice')));
+});
+
+test('client cannot create or update daily streak rewards', async () => {
+  const db = user('alice');
+
+  await assertFails(setDoc(doc(db, 'dailyStreaks/alice'), {
+    uid: 'alice',
+    streak: 100,
+    points: 100000,
+    badges: ['streak_100'],
+  }));
+
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'dailyStreaks/alice'), {
+      uid: 'alice',
+      streak: 1,
+      points: 0,
+    });
+  });
+
+  await assertFails(updateDoc(doc(db, 'dailyStreaks/alice'), {
+    streak: 100,
+    points: 100000,
+  }));
+});
+
+test('client cannot delete daily streak records', async () => {
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'dailyStreaks/alice'), {
+      uid: 'alice',
+      streak: 1,
+    });
+  });
+
+  await assertFails(deleteDoc(doc(user('alice'), 'dailyStreaks/alice')));
+});

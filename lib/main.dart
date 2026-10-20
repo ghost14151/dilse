@@ -622,6 +622,123 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
+
+class _DailyStreakHomeCard extends StatelessWidget {
+  const _DailyStreakHomeCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  String _dateKey(DateTime date) =>
+      '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    return Material(
+      color: surface,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Container(
+          padding: const EdgeInsets.all(17),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: pink.withValues(alpha: 0.45)),
+            gradient: LinearGradient(
+              colors: [
+                purple.withValues(alpha: 0.24),
+                pink.withValues(alpha: 0.12),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: pink.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.local_fire_department_rounded,
+                  color: pink,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Daily DilSe Streak',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    if (user == null || !user.emailVerified)
+                      const Text(
+                        'Verified login zaroori hai',
+                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                      )
+                    else
+                      StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                        stream: FirebaseFirestore.instance
+                            .collection('dailyStreaks')
+                            .doc(user.uid)
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          final data = snapshot.data?.data();
+                          final count =
+                              (data?['streak'] as num?)?.toInt() ?? 0;
+                          final checkedIn =
+                              data?['lastCheckInDate'] == _dateKey(DateTime.now());
+
+                          if (snapshot.hasError) {
+                            return const Text(
+                              'Streak load nahi hui · Tap karke retry karo',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            );
+                          }
+
+                          return Text(
+                            snapshot.connectionState == ConnectionState.waiting
+                                ? 'Streak load ho rahi hai...'
+                                : checkedIn
+                                    ? '$count days · Aaj ka check-in complete ❤️'
+                                    : '$count days · Aaj check-in karna baaki hai',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white70),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.onOpenTab});
 
@@ -770,6 +887,15 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          _DailyStreakHomeCard(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const DailyStreakPage(),
+              ),
             ),
           ),
           const SizedBox(height: 25),

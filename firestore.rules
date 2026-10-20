@@ -286,25 +286,8 @@ service cloud.firestore {
     match /dailyStreaks/{userId} {
       allow read: if verifiedUser()
         && request.auth.uid == userId;
-      allow create: if verifiedUser()
-        && request.auth.uid == userId
-        && request.resource.data.uid == userId
-        && request.resource.data.streak is int
-        && request.resource.data.streak >= 1
-        && request.resource.data.lastCheckInDate is string
-        && request.resource.data.keys().hasOnly([
-          'uid', 'streak', 'lastCheckInDate', 'updatedAt'
-        ]);
-      allow update: if verifiedUser()
-        && request.auth.uid == userId
-        && request.resource.data.uid == userId
-        && request.resource.data.streak is int
-        && request.resource.data.streak >= 1
-        && request.resource.data.lastCheckInDate is string
-        && request.resource.data.keys().hasOnly([
-          'uid', 'streak', 'lastCheckInDate', 'updatedAt'
-        ]);
-      allow delete: if false;
+      // Only trusted server code may create or change streaks/rewards.
+      allow create, update, delete: if false;
     }
 
     match /reports/{reportId} {
