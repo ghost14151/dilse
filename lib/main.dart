@@ -1033,7 +1033,10 @@ class _HomePageState extends State<HomePage> {
             child: Text(
               'DilSe — Dosti Jo Dil Tak Jaaye ❤️',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70),
+              style: TextStyle(
+                color: Color(0xFF39245C),
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
