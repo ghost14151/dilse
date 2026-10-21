@@ -1978,14 +1978,11 @@ class FriendRequestsPage extends StatelessWidget {
           ),
         );
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Friend request response failed: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Action nahi hua. Firestore rules publish/check karo.',
-            ),
-          ),
+          SnackBar(content: Text('Accept/Reject fail: $e')),
         );
       }
     }
@@ -2163,6 +2160,11 @@ class PublicUserProfilePage extends StatelessWidget {
                   }
                 } catch (e) {
                   debugPrint('DilSe friend request failed: $e');
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Request fail: $e')),
+                    );
+                  }
                   if (context.mounted) {
                     ScaffoldMessenger.of(
                       context,
