@@ -984,15 +984,18 @@ class _DailyStreakPageState extends State<DailyStreakPage> {
       final result = await callable.call();
       final data = Map<String, dynamic>.from(result.data as Map);
       final already = data['alreadyCheckedIn'] == true;
+      final premiumDay = data['premiumDaysGranted'] == true;
 
       if (mounted) {
         final unlocked = data['newlyUnlocked'] as List? ?? [];
         final message = already
             ? 'Aaj ka check-in ho chuka hai ❤️'
-            : unlocked.isEmpty
-                ? 'Daily check-in complete! 🔥'
-                : 'Streak ${data['streak']} days! 🎉 '
-                    'Milestone reward unlock hua!';
+            : premiumDay
+                ? 'Streak ${data['streak']} days! 👑 1 Premium day mil gaya!'
+                : unlocked.isEmpty
+                    ? 'Daily check-in complete! 🔥'
+                    : 'Streak ${data['streak']} days! 🎉 '
+                        'Milestone reward unlock hua!';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(message)),
         );

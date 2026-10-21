@@ -163,6 +163,7 @@ exports.dailyStreakCheckIn = onCall(async (request) => {
   const uid = request.auth.uid;
   const db = admin.firestore();
   const ref = db.collection("dailyStreaks").doc(uid);
+  const subscriptionRef = db.collection("subscriptions").doc(uid);
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
   const yesterdayDate = new Date(now.getTime() - 86400000);
@@ -178,6 +179,7 @@ exports.dailyStreakCheckIn = onCall(async (request) => {
 
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
+    const subscriptionSnap = await tx.get(subscriptionRef);
     const old = snap.exists ? snap.data() : {};
     if (old.lastCheckInDate === today) {
       return {
@@ -200,6 +202,25 @@ exports.dailyStreakCheckIn = onCall(async (request) => {
       ...unlocked, ...newlyUnlocked.map((m) => m.days),
     ])];
 
+    // DILSE_STREAK_PREMIUM_DAY_V1
+    // Every seventh consecutive check-in grants one server-authoritative day.
+    const premiumDaysGranted = next % 7 === 0;
+    if (premiumDaysGranted) {
+      const sub = subscriptionSnap.exists ? subscriptionSnap.data() : {};
+      const expiry = sub.expiresAt &&
+          typeof sub.expiresAt.toDate === "function" ?
+          sub.expiresAt.toDate() : null;
+      const base = expiry && expiry > now ? expiry : now;
+      const newExpiry = new Date(base.getTime() + 86400000);
+
+      tx.set(subscriptionRef, {
+        active: true,
+        expiresAt: admin.firestore.Timestamp.fromDate(newExpiry),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastStreakRewardAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, {merge: true});
+    }
+
     tx.set(ref, {
       uid,
       streak: next,
@@ -216,6 +237,7 @@ exports.dailyStreakCheckIn = onCall(async (request) => {
     return {
       alreadyCheckedIn: false,
       streak: next,
+      premiumDaysGranted,
       points: (Number.isInteger(old.points) ? old.points : 0) + addedPoints,
       newlyUnlocked: newlyUnlocked.map((m) => ({
         days: m.days, points: m.points, badge: m.badge,
