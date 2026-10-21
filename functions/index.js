@@ -224,3 +224,158 @@ exports.dailyStreakCheckIn = onCall(async (request) => {
     };
   });
 });
+
+
+// DILSE_ACCOUNT_MANAGEMENT_V1
+// Keep shared chats and messages when a user account is removed.
+/** Verifies the signed-in user's email and moderation status.
+ * @param {object} request - Callable request.
+ */
+async function requireVerifiedAccount(request) {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Please sign in first.");
+  }
+  if (request.auth.token.email_verified !== true) {
+    throw new HttpsError("permission-denied", "Verify your email first.");
+  }
+  const db = admin.firestore();
+  const blocked = await db.collection("adminBlocks")
+      .doc(request.auth.uid).get();
+  if (blocked.exists) {
+    throw new HttpsError("permission-denied", "This account is blocked.");
+  }
+  return request.auth.uid;
+}
+
+/** Verifies that the caller has an authorized admin document.
+ * @param {object} request - Callable request.
+ */
+async function requireDilSeAdmin(request) {
+  const uid = await requireVerifiedAccount(request);
+  const snap = await admin.firestore().collection("admins").doc(uid).get();
+  if (!snap.exists) {
+    throw new HttpsError("permission-denied", "Admin permission required.");
+  }
+  return uid;
+}
+
+/** Deletes document references in Firestore-safe batches.
+ * @param {Array} refs - Firestore document references.
+ */
+async function deleteDocsInBatches(refs) {
+  for (let i = 0; i < refs.length; i += 400) {
+    const batch = admin.firestore().batch();
+    for (const ref of refs.slice(i, i + 400)) batch.delete(ref);
+    await batch.commit();
+  }
+}
+
+/** Removes account-owned data while preserving shared chat history.
+ * @param {string} uid - Account user ID.
+ */
+async function removeDilSeAccountData(uid) {
+  const db = admin.firestore();
+  const refs = [];
+  const profileRef = db.collection("users").doc(uid);
+
+  const tokenDocs = await profileRef.collection("fcmTokens").get();
+  refs.push(...tokenDocs.docs.map((doc) => doc.ref));
+
+  for (const collectionName of [
+    "chatUsage", "subscriptions", "freeChatAccess",
+    "dailyStreaks", "adminBlocks", "admins",
+  ]) {
+    refs.push(db.collection(collectionName).doc(uid));
+  }
+
+  for (const [collectionName, field] of [
+    ["friendRequests", "senderId"],
+    ["friendRequests", "receiverId"],
+    ["blocks", "blockerId"],
+    ["blocks", "blockedUserId"],
+  ]) {
+    const snap = await db.collection(collectionName)
+        .where(field, "==", uid).get();
+    refs.push(...snap.docs.map((doc) => doc.ref));
+  }
+
+  refs.push(profileRef);
+  const uniqueRefs = [...new Map(refs.map((ref) => [ref.path, ref])).values()];
+  await deleteDocsInBatches(uniqueRefs);
+}
+
+exports.deleteOwnDilSeAccount = onCall(async (request) => {
+  const uid = await requireVerifiedAccount(request);
+  await removeDilSeAccountData(uid);
+  await admin.auth().deleteUser(uid);
+  return {
+    success: true,
+    message: "Account deleted. Shared chat history was preserved.",
+  };
+});
+
+exports.adminSetUserBlocked = onCall(async (request) => {
+  const adminUid = await requireDilSeAdmin(request);
+  const data = request.data || {};
+  const targetUid = data.targetUid;
+  const blocked = data.blocked;
+
+  if (typeof targetUid !== "string" || !targetUid ||
+      targetUid === adminUid || typeof blocked !== "boolean") {
+    throw new HttpsError("invalid-argument", "Invalid moderation request.");
+  }
+
+  const db = admin.firestore();
+  const targetAdmin = await db.collection("admins").doc(targetUid).get();
+  if (targetAdmin.exists) {
+    throw new HttpsError(
+        "failed-precondition", "Admin accounts cannot be moderated here.",
+    );
+  }
+
+  const blockRef = db.collection("adminBlocks").doc(targetUid);
+  if (blocked) {
+    await blockRef.set({
+      active: true,
+      blockedBy: adminUid,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    await admin.auth().updateUser(targetUid, {disabled: true});
+  } else {
+    await admin.auth().updateUser(targetUid, {disabled: false});
+    await blockRef.delete();
+  }
+
+  return {success: true, targetUid, blocked};
+});
+
+exports.adminDeleteDilSeUser = onCall(async (request) => {
+  await requireDilSeAdmin(request);
+  const data = request.data || {};
+  const targetUid = data.targetUid;
+
+  if (typeof targetUid !== "string" || !targetUid) {
+    throw new HttpsError("invalid-argument", "Invalid user ID.");
+  }
+
+  const db = admin.firestore();
+  const targetAdmin = await db.collection("admins").doc(targetUid).get();
+  if (targetAdmin.exists) {
+    throw new HttpsError(
+        "failed-precondition", "Admin accounts cannot be deleted here.",
+    );
+  }
+
+  await removeDilSeAccountData(targetUid);
+  try {
+    await admin.auth().deleteUser(targetUid);
+  } catch (error) {
+    if (error.code !== "auth/user-not-found") throw error;
+  }
+
+  return {
+    success: true,
+    targetUid,
+    message: "User account removed; shared chat history was preserved.",
+  };
+});

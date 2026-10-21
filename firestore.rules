@@ -4,7 +4,8 @@ service cloud.firestore {
 
     function verifiedUser() {
       return request.auth != null
-        && request.auth.token.email_verified == true;
+        && request.auth.token.email_verified == true
+        && !exists(/databases/$(database)/documents/adminBlocks/$(request.auth.uid));
     }
 
     function chatMember(chatId) {
@@ -43,6 +44,12 @@ service cloud.firestore {
     function matchingUsageMessage() {
       let path = /databases/$(database)/documents/chats/$(request.resource.data.lastChatId)/messages/$(request.resource.data.lastMessageId);
       return getAfter(path).data.senderId == request.auth.uid;
+    }
+
+    // Admin SDK only: clients cannot create or remove moderation blocks.
+    match /adminBlocks/{userId} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /admins/{adminId} {

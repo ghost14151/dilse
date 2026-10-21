@@ -452,9 +452,236 @@ class _AdminFreeChatAccessSectionState
                   padding: EdgeInsets.all(16),
                   child: Text('Search ke liye kam se kam 2 letters likho.'),
                 ),
+              const AdminUserModerationSection(),
               const AdminReportsSection(),
             ],
           ),
+        );
+      },
+    );
+  }
+}
+
+
+class AdminUserModerationSection extends StatefulWidget {
+  const AdminUserModerationSection({super.key});
+
+  @override
+  State<AdminUserModerationSection> createState() =>
+      _AdminUserModerationSectionState();
+}
+
+class _AdminUserModerationSectionState
+    extends State<AdminUserModerationSection> {
+  final _search = TextEditingController();
+  String _query = '';
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _moderate(
+    String uid,
+    String name,
+    bool currentlyBlocked,
+  ) async {
+    final action = currentlyBlocked ? 'Unblock' : 'Block';
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('$action $name?'),
+        content: Text('Kya tum is user ko ${action.toLowerCase()} karna chahte ho?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: Text(action),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('adminSetUserBlocked')
+          .call({'targetUid': uid, 'blocked': !currentlyBlocked});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$name ${currentlyBlocked ? "unblocked" : "blocked"}')),
+        );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message ?? 'Action fail hui.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Action fail hui.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteUser(String uid, String name) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Delete $name?'),
+        content: const Text(
+          'Account permanently delete hoga. Shared chat history preserve hogi. '
+          'Ye action undo nahi hoga.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Delete User'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      await FirebaseFunctions.instance
+          .httpsCallable('adminDeleteDilSeUser')
+          .call({'targetUid': uid});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$name ka account delete ho gaya.')),
+        );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message ?? 'Delete fail hua.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Delete fail hua.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final me = FirebaseAuth.instance.currentUser;
+    if (me == null || !me.emailVerified) return const SizedBox.shrink();
+    final db = FirebaseFirestore.instance;
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: db.collection('admins').doc(me.uid).snapshots(),
+      builder: (context, admin) {
+        if (admin.data?.exists != true) return const SizedBox.shrink();
+
+        return ExpansionTile(
+          leading: const Icon(Icons.admin_panel_settings_outlined),
+          title: const Text('User Moderation'),
+          subtitle: const Text('Block, unblock ya account delete karo'),
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: TextField(
+                controller: _search,
+                onChanged: (v) => setState(() => _query = v.trim()),
+                decoration: const InputDecoration(
+                  labelText: 'User ka naam search karo',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            if (_busy) const LinearProgressIndicator(),
+            if (_query.length >= 2)
+              SizedBox(
+                height: 360,
+                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: db.collection('users')
+                      .orderBy('searchName')
+                      .startAt([_query.toLowerCase()])
+                      .endAt(['${_query.toLowerCase()}\uf8ff'])
+                      .limit(20)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return const Center(child: Text('Users load nahi hue.'));
+                    }
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final users = snapshot.data!.docs
+                        .where((d) => d.id != me.uid)
+                        .toList();
+                    if (users.isEmpty) {
+                      return const Center(child: Text('Koi user nahi mila.'));
+                    }
+                    return ListView(
+                      children: users.map((doc) {
+                        final data = doc.data();
+                        final name = data['displayName'] as String? ?? 'DilSe User';
+                        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                          stream: db.collection('adminBlocks').doc(doc.id).snapshots(),
+                          builder: (context, blockSnap) {
+                            final blocked = blockSnap.data?.exists == true;
+                            return ListTile(
+                              title: Text(name),
+                              subtitle: Text(blocked ? 'Admin blocked' : doc.id),
+                              trailing: PopupMenuButton<String>(
+                                enabled: !_busy,
+                                onSelected: (v) {
+                                  if (v == 'block') {
+                                    _moderate(doc.id, name, blocked);
+                                  } else if (v == 'delete') {
+                                    _deleteUser(doc.id, name);
+                                  }
+                                },
+                                itemBuilder: (_) => [
+                                  PopupMenuItem(
+                                    value: 'block',
+                                    child: Text(blocked ? 'Unblock User' : 'Block User'),
+                                  ),
+                                  const PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text('Delete User'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
+              )
+            else
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('Search ke liye kam se kam 2 letters likho.'),
+              ),
+          ],
         );
       },
     );
@@ -1007,6 +1234,54 @@ class DilSeSettingsSection extends StatelessWidget {
             () => info('About DilSe', 'DilSe ❤️\nDosti Jo Dil Tak Jaaye'),
           ),
           const Divider(height: 1),
+
+          // DILSE_ACCOUNT_MODERATION_UI_V1
+          option(
+            Icons.delete_forever_outlined,
+            'Delete My Account',
+            'Account permanently delete karo',
+            () async {
+              final me = FirebaseAuth.instance.currentUser;
+              if (me == null) return;
+              final yes = await showDialog<bool>(
+                context: context,
+                builder: (c) => AlertDialog(
+                  title: const Text('Delete account permanently?'),
+                  content: const Text(
+                    'Tumhara account aur profile data delete hoga. '
+                    'Shared chat history preserve ki jayegi. Ye action undo nahi hoga.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(c, false),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(c, true),
+                      child: const Text('Delete Account'),
+                    ),
+                  ],
+                ),
+              );
+              if (yes != true || !context.mounted) return;
+              try {
+                await FirebaseFunctions.instance
+                    .httpsCallable('deleteOwnDilSeAccount')
+                    .call();
+                await FirebaseAuth.instance.signOut();
+              } on FirebaseFunctionsException catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(e.message ?? 'Account delete nahi hua.')),
+                );
+              } catch (_) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Account delete nahi hua.')),
+                );
+              }
+            },
+          ),
           option(Icons.logout, 'Log Out', 'Sign out of DilSe', () async {
             final yes = await showDialog<bool>(
               context: context,
